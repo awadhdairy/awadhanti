@@ -88,6 +88,30 @@ export type Database = {
           },
         ]
       }
+      auth_attempts: {
+        Row: {
+          failed_count: number | null
+          id: string
+          last_attempt: string | null
+          locked_until: string | null
+          phone: string
+        }
+        Insert: {
+          failed_count?: number | null
+          id?: string
+          last_attempt?: string | null
+          locked_until?: string | null
+          phone: string
+        }
+        Update: {
+          failed_count?: number | null
+          id?: string
+          last_attempt?: string | null
+          locked_until?: string | null
+          phone?: string
+        }
+        Relationships: []
+      }
       bottle_transactions: {
         Row: {
           bottle_id: string
@@ -1053,6 +1077,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      has_any_role: {
+        Args: {
+          _roles: Database["public"]["Enums"]["user_role"][]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["user_role"]
@@ -1061,6 +1092,7 @@ export type Database = {
         Returns: boolean
       }
       is_authenticated: { Args: never; Returns: boolean }
+      is_manager_or_admin: { Args: { _user_id: string }; Returns: boolean }
       verify_pin: { Args: { _phone: string; _pin: string }; Returns: string }
     }
     Enums: {
