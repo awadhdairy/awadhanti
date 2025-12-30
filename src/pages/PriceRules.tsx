@@ -220,10 +220,10 @@ export default function PriceRulesPage() {
 
               <div className="space-y-2">
                 <Label>Apply to Product</Label>
-                <Select value={productId} onValueChange={setProductId}>
+                <Select value={productId || "all"} onValueChange={(val) => setProductId(val === "all" ? "" : val)}>
                   <SelectTrigger><SelectValue placeholder="All products" /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">All Products</SelectItem>
+                    <SelectItem value="all">All Products</SelectItem>
                     {products.map(p => (
                       <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                     ))}
