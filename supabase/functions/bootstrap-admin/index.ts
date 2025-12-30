@@ -43,14 +43,23 @@ serve(async (req) => {
 
     if (existingUser) {
       // User exists, ensure they have super_admin role
-      await supabaseAdmin
+      const { error: roleUpdateError } = await supabaseAdmin
         .from('user_roles')
-        .upsert({ user_id: existingUser.id, role: 'super_admin' }, { onConflict: 'user_id' })
+        .update({ role: 'super_admin' })
+        .eq('user_id', existingUser.id)
 
-      await supabaseAdmin
+      if (roleUpdateError) {
+        console.error('Role update error:', roleUpdateError)
+      }
+
+      const { error: profileUpdateError } = await supabaseAdmin
         .from('profiles')
         .update({ role: 'super_admin', full_name: 'Super Admin' })
         .eq('id', existingUser.id)
+
+      if (profileUpdateError) {
+        console.error('Profile update error:', profileUpdateError)
+      }
 
       return new Response(
         JSON.stringify({ 
