@@ -1,69 +1,239 @@
-import { useState } from 'react';
-import { Plus, Minus, ShoppingCart, Milk, Package, Search } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useState, useEffect } from 'react';
+import { Plus, Minus, ShoppingCart, Milk, Package, Search, Loader2 } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { useCustomerAuth } from '@/hooks/useCustomerAuth';
+import { supabase } from '@/integrations/supabase/client';
 
 interface Product {
   id: string;
   name: string;
   category: string;
-  price: number;
+  base_price: number;
   unit: string;
-  description: string;
-  image?: string;
-  inSubscription: boolean;
+  description: string | null;
+  image_url: string | null;
+  is_active: boolean;
 }
 
-// Dummy product data
-const dummyProducts: Product[] = [
-  { id: '1', name: 'Full Cream Milk', category: 'Milk', price: 60, unit: 'liter', description: 'Fresh full cream cow milk with 6% fat content', inSubscription: true },
-  { id: '2', name: 'Toned Milk', category: 'Milk', price: 52, unit: 'liter', description: 'Low fat toned milk with 3% fat content', inSubscription: false },
-  { id: '3', name: 'Double Toned Milk', category: 'Milk', price: 48, unit: 'liter', description: 'Double toned milk with 1.5% fat content', inSubscription: false },
-  { id: '4', name: 'Buffalo Milk', category: 'Milk', price: 70, unit: 'liter', description: 'Rich buffalo milk with 8% fat content', inSubscription: true },
-  { id: '5', name: 'A2 Cow Milk', category: 'Milk', price: 80, unit: 'liter', description: 'Premium A2 protein cow milk from desi cows', inSubscription: false },
-  { id: '6', name: 'Fresh Curd', category: 'Dairy', price: 55, unit: 'kg', description: 'Thick and creamy homemade style curd', inSubscription: true },
-  { id: '7', name: 'Paneer', category: 'Dairy', price: 320, unit: 'kg', description: 'Fresh cottage cheese made from full cream milk', inSubscription: false },
-  { id: '8', name: 'Fresh Butter', category: 'Dairy', price: 450, unit: 'kg', description: 'Hand churned fresh white butter', inSubscription: false },
-  { id: '9', name: 'Buttermilk', category: 'Dairy', price: 30, unit: 'liter', description: 'Refreshing spiced buttermilk', inSubscription: false },
-  { id: '10', name: 'Ghee', category: 'Dairy', price: 550, unit: 'kg', description: 'Pure desi cow ghee, bilona method', inSubscription: false },
-];
-
-const categories = ['All', 'Milk', 'Dairy'];
+interface SubscribedProduct {
+  product_id: string;
+  quantity: number;
+  custom_price: number | null;
+  is_active: boolean;
+}
 
 export default function CustomerProducts() {
   const { toast } = useToast();
+  const { customerId } = useCustomerAuth();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [subscribedProducts, setSubscribedProducts] = useState<SubscribedProduct[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [saving, setSaving] = useState<string | null>(null);
 
-  const filteredProducts = dummyProducts.filter(product => {
+  useEffect(() => {
+    if (customerId) {
+      fetchData();
+    }
+  }, [customerId]);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      
+      // Fetch all active products
+      const { data: productsData, error: productsError } = await supabase
+        .from('products')
+        .select('*')
+        .eq('is_active', true)
+        .order('category', { ascending: true })
+        .order('name', { ascending: true });
+
+      if (productsError) throw productsError;
+      setProducts(productsData || []);
+
+      // Fetch customer's subscribed products
+      const { data: subscribedData, error: subscribedError } = await supabase
+        .from('customer_products')
+        .select('product_id, quantity, custom_price, is_active')
+        .eq('customer_id', customerId);
+
+      if (subscribedError) throw subscribedError;
+      setSubscribedProducts(subscribedData || []);
+    } catch (error: any) {
+      toast({
+        title: "Error loading products",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const categories = ['All', ...new Set(products.map(p => p.category))];
+
+  const filteredProducts = products.filter(product => {
     const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesCategory = selectedCategory === 'All' || product.category === selectedCategory;
     return matchesSearch && matchesCategory;
   });
 
+  const getSubscribedProduct = (productId: string) => {
+    return subscribedProducts.find(sp => sp.product_id === productId);
+  };
+
   const updateQuantity = (productId: string, delta: number) => {
     setQuantities(prev => {
-      const current = prev[productId] || 0;
+      const subscribed = getSubscribedProduct(productId);
+      const current = prev[productId] ?? (subscribed?.quantity || 0);
       const newQty = Math.max(0, current + delta);
       return { ...prev, [productId]: newQty };
     });
   };
 
-  const addToSubscription = (product: Product) => {
-    const qty = quantities[product.id] || 1;
-    toast({
-      title: "Added to Subscription",
-      description: `${qty}x ${product.name} added to your daily subscription`,
-    });
-    setQuantities(prev => ({ ...prev, [product.id]: 0 }));
+  const getDisplayQuantity = (productId: string) => {
+    if (quantities[productId] !== undefined) {
+      return quantities[productId];
+    }
+    const subscribed = getSubscribedProduct(productId);
+    return subscribed?.quantity || 0;
   };
 
-  const cartItemsCount = Object.values(quantities).reduce((sum, qty) => sum + (qty > 0 ? 1 : 0), 0);
+  const addToSubscription = async (product: Product) => {
+    if (!customerId) return;
+    
+    const qty = getDisplayQuantity(product.id);
+    if (qty <= 0) {
+      toast({
+        title: "Invalid quantity",
+        description: "Please select a quantity greater than 0",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setSaving(product.id);
+    try {
+      const existingSubscription = getSubscribedProduct(product.id);
+
+      if (existingSubscription) {
+        // Update existing subscription
+        const { error } = await supabase
+          .from('customer_products')
+          .update({ quantity: qty, is_active: true })
+          .eq('customer_id', customerId)
+          .eq('product_id', product.id);
+
+        if (error) throw error;
+
+        setSubscribedProducts(prev => 
+          prev.map(sp => 
+            sp.product_id === product.id 
+              ? { ...sp, quantity: qty, is_active: true }
+              : sp
+          )
+        );
+
+        toast({
+          title: "Subscription Updated",
+          description: `${product.name} quantity updated to ${qty} ${product.unit}/day`,
+        });
+      } else {
+        // Add new subscription
+        const { error } = await supabase
+          .from('customer_products')
+          .insert({
+            customer_id: customerId,
+            product_id: product.id,
+            quantity: qty,
+            is_active: true,
+          });
+
+        if (error) throw error;
+
+        setSubscribedProducts(prev => [
+          ...prev,
+          { product_id: product.id, quantity: qty, custom_price: null, is_active: true }
+        ]);
+
+        toast({
+          title: "Added to Subscription",
+          description: `${qty} ${product.unit} of ${product.name} added to your daily subscription`,
+        });
+      }
+
+      // Clear the temporary quantity
+      setQuantities(prev => {
+        const newQty = { ...prev };
+        delete newQty[product.id];
+        return newQty;
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to update subscription",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const removeFromSubscription = async (product: Product) => {
+    if (!customerId) return;
+
+    setSaving(product.id);
+    try {
+      const { error } = await supabase
+        .from('customer_products')
+        .delete()
+        .eq('customer_id', customerId)
+        .eq('product_id', product.id);
+
+      if (error) throw error;
+
+      setSubscribedProducts(prev => 
+        prev.filter(sp => sp.product_id !== product.id)
+      );
+
+      setQuantities(prev => {
+        const newQty = { ...prev };
+        delete newQty[product.id];
+        return newQty;
+      });
+
+      toast({
+        title: "Removed from Subscription",
+        description: `${product.name} removed from your subscription`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Failed to remove",
+        description: error.message,
+        variant: "destructive",
+      });
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const subscribedCount = subscribedProducts.filter(sp => sp.is_active).length;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 pb-20">
@@ -73,14 +243,11 @@ export default function CustomerProducts() {
           <h1 className="text-2xl font-bold">Products</h1>
           <p className="text-muted-foreground">Browse and add to your subscription</p>
         </div>
-        {cartItemsCount > 0 && (
-          <Button size="sm" className="relative">
-            <ShoppingCart className="h-4 w-4 mr-2" />
-            Cart
-            <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs">
-              {cartItemsCount}
-            </Badge>
-          </Button>
+        {subscribedCount > 0 && (
+          <Badge variant="secondary" className="text-sm">
+            <ShoppingCart className="h-3 w-3 mr-1" />
+            {subscribedCount} subscribed
+          </Badge>
         )}
       </div>
 
@@ -97,7 +264,7 @@ export default function CustomerProducts() {
 
       {/* Categories */}
       <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-        <TabsList className="w-full justify-start">
+        <TabsList className="w-full justify-start overflow-x-auto">
           {categories.map(cat => (
             <TabsTrigger key={cat} value={cat}>{cat}</TabsTrigger>
           ))}
@@ -116,7 +283,10 @@ export default function CustomerProducts() {
           </Card>
         ) : (
           filteredProducts.map(product => {
-            const qty = quantities[product.id] || 0;
+            const subscribed = getSubscribedProduct(product.id);
+            const displayQty = getDisplayQuantity(product.id);
+            const hasChanges = quantities[product.id] !== undefined && quantities[product.id] !== (subscribed?.quantity || 0);
+            const isSaving = saving === product.id;
             
             return (
               <Card key={product.id} className="overflow-hidden">
@@ -132,54 +302,74 @@ export default function CustomerProducts() {
                       <div className="flex items-start justify-between gap-2">
                         <div>
                           <h3 className="font-semibold">{product.name}</h3>
-                          <p className="text-sm text-muted-foreground line-clamp-2">{product.description}</p>
+                          <p className="text-sm text-muted-foreground line-clamp-2">
+                            {product.description || `Fresh ${product.name.toLowerCase()}`}
+                          </p>
                         </div>
-                        {product.inSubscription && (
-                          <Badge variant="secondary" className="flex-shrink-0">Subscribed</Badge>
+                        {subscribed && subscribed.is_active && (
+                          <Badge variant="secondary" className="flex-shrink-0">
+                            {subscribed.quantity} {product.unit}/day
+                          </Badge>
                         )}
                       </div>
                       
                       <div className="flex items-center justify-between mt-3">
                         <div>
-                          <p className="text-lg font-bold text-primary">₹{product.price}</p>
+                          <p className="text-lg font-bold text-primary">
+                            ₹{subscribed?.custom_price || product.base_price}
+                          </p>
                           <p className="text-xs text-muted-foreground">per {product.unit}</p>
                         </div>
                         
                         <div className="flex items-center gap-2">
-                          {qty > 0 ? (
-                            <>
-                              <Button 
-                                size="icon" 
-                                variant="outline" 
-                                className="h-8 w-8"
-                                onClick={() => updateQuantity(product.id, -1)}
-                              >
-                                <Minus className="h-4 w-4" />
-                              </Button>
-                              <span className="w-8 text-center font-bold">{qty}</span>
-                              <Button 
-                                size="icon" 
-                                variant="outline" 
-                                className="h-8 w-8"
-                                onClick={() => updateQuantity(product.id, 1)}
-                              >
-                                <Plus className="h-4 w-4" />
-                              </Button>
-                              <Button 
-                                size="sm"
-                                onClick={() => addToSubscription(product)}
-                              >
-                                Add
-                              </Button>
-                            </>
-                          ) : (
+                          <Button 
+                            size="icon" 
+                            variant="outline" 
+                            className="h-8 w-8"
+                            onClick={() => updateQuantity(product.id, -1)}
+                            disabled={displayQty <= 0 || isSaving}
+                          >
+                            <Minus className="h-4 w-4" />
+                          </Button>
+                          <span className="w-8 text-center font-bold">{displayQty}</span>
+                          <Button 
+                            size="icon" 
+                            variant="outline" 
+                            className="h-8 w-8"
+                            onClick={() => updateQuantity(product.id, 1)}
+                            disabled={isSaving}
+                          >
+                            <Plus className="h-4 w-4" />
+                          </Button>
+                          
+                          {displayQty > 0 && (hasChanges || !subscribed) && (
                             <Button 
-                              size="sm" 
-                              variant="outline"
-                              onClick={() => updateQuantity(product.id, 1)}
+                              size="sm"
+                              onClick={() => addToSubscription(product)}
+                              disabled={isSaving}
                             >
-                              <Plus className="h-4 w-4 mr-1" />
-                              Add
+                              {isSaving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : subscribed ? (
+                                'Update'
+                              ) : (
+                                'Add'
+                              )}
+                            </Button>
+                          )}
+                          
+                          {subscribed && displayQty === 0 && (
+                            <Button 
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => removeFromSubscription(product)}
+                              disabled={isSaving}
+                            >
+                              {isSaving ? (
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                              ) : (
+                                'Remove'
+                              )}
                             </Button>
                           )}
                         </div>
