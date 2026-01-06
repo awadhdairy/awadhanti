@@ -12,8 +12,9 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Heart, Baby, Syringe, Calendar, Loader2, AlertCircle } from "lucide-react";
+import { Plus, Heart, Baby, Syringe, Calendar, Loader2, AlertCircle, CalendarDays, List } from "lucide-react";
 import { format, addDays, differenceInDays } from "date-fns";
+import { BreedingCalendar } from "@/components/breeding/BreedingCalendar";
 
 interface Cattle {
   id: string;
@@ -47,12 +48,23 @@ const recordTypeLabels: Record<string, { label: string; color: string; icon: any
   calving: { label: "Calving", color: "bg-green-500", icon: Baby },
 };
 
+interface HealthRecord {
+  id: string;
+  cattle_id: string;
+  record_type: string;
+  title: string;
+  record_date: string;
+  next_due_date: string | null;
+}
+
 export default function BreedingPage() {
   const { toast } = useToast();
   const [cattle, setCattle] = useState<Cattle[]>([]);
   const [records, setRecords] = useState<BreedingRecord[]>([]);
+  const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [viewMode, setViewMode] = useState<"list" | "calendar">("calendar");
   
   // Form states
   const [selectedCattle, setSelectedCattle] = useState("");
@@ -74,13 +86,15 @@ export default function BreedingPage() {
 
   const fetchData = async () => {
     try {
-      const [cattleRes, recordsRes] = await Promise.all([
+      const [cattleRes, recordsRes, healthRes] = await Promise.all([
         supabase.from("cattle").select("id, tag_number, name, cattle_type, lactation_status").eq("cattle_type", "cow").eq("status", "active"),
         supabase.from("breeding_records").select("*").order("record_date", { ascending: false }),
+        supabase.from("cattle_health").select("id, cattle_id, record_type, title, record_date, next_due_date").order("record_date", { ascending: false }),
       ]);
 
       if (cattleRes.data) setCattle(cattleRes.data);
       if (recordsRes.data) setRecords(recordsRes.data);
+      if (healthRes.data) setHealthRecords(healthRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
     } finally {
@@ -230,10 +244,27 @@ export default function BreedingPage() {
         title="Breeding Management"
         description="Track heat cycles, inseminations, pregnancies, and calvings"
       >
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-          <DialogTrigger asChild>
-            <Button><Plus className="mr-2 h-4 w-4" /> Add Record</Button>
-          </DialogTrigger>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center rounded-lg border p-1">
+            <Button 
+              variant={viewMode === "calendar" ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setViewMode("calendar")}
+            >
+              <CalendarDays className="mr-2 h-4 w-4" /> Calendar
+            </Button>
+            <Button 
+              variant={viewMode === "list" ? "default" : "ghost"} 
+              size="sm"
+              onClick={() => setViewMode("list")}
+            >
+              <List className="mr-2 h-4 w-4" /> List
+            </Button>
+          </div>
+          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            <DialogTrigger asChild>
+              <Button><Plus className="mr-2 h-4 w-4" /> Add Record</Button>
+            </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
               <DialogTitle>Add Breeding Record</DialogTitle>
