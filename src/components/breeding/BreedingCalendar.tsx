@@ -16,9 +16,12 @@ import {
   Pill,
   Calendar as CalendarIcon,
   Filter,
-  Clock
+  Clock,
+  Bell
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useBreedingAlerts } from "@/hooks/useBreedingAlerts";
+import { BreedingAlertsPanel } from "./BreedingAlertsPanel";
 
 interface Cattle {
   id: string;
@@ -84,6 +87,20 @@ export function BreedingCalendar({ cattle, breedingRecords, healthRecords }: Bre
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState<Date | null>(null);
   const [filterType, setFilterType] = useState<string>("all");
+  const [showAlerts, setShowAlerts] = useState(false);
+
+  // Use the breeding alerts hook
+  const { alerts, criticalCount, warningCount, upcomingCount } = useBreedingAlerts(
+    breedingRecords,
+    healthRecords,
+    cattle.map(c => ({
+      id: c.id,
+      tag_number: c.tag_number,
+      name: c.name,
+      status: c.lactation_status === "lactating" ? "active" : "active",
+      lactation_status: c.lactation_status || null,
+    }))
+  );
 
   const getCattleTag = (cattleId: string) => {
     const c = cattle.find(c => c.id === cattleId);
@@ -297,6 +314,44 @@ export function BreedingCalendar({ cattle, breedingRecords, healthRecords }: Bre
 
   return (
     <div className="space-y-4">
+      {/* Alerts Banner */}
+      {(criticalCount > 0 || warningCount > 0) && (
+        <Card className={cn(
+          "border-l-4",
+          criticalCount > 0 ? "border-l-destructive bg-destructive/5" : "border-l-warning bg-warning/5"
+        )}>
+          <CardContent className="p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <Bell className={cn("h-5 w-5", criticalCount > 0 ? "text-destructive" : "text-warning")} />
+                <div>
+                  <p className="font-medium">
+                    {criticalCount > 0 ? `${criticalCount} critical alert${criticalCount > 1 ? 's' : ''} require attention` : `${warningCount} upcoming reminder${warningCount > 1 ? 's' : ''}`}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    Heat cycles, vaccinations, and calvings that need your attention
+                  </p>
+                </div>
+              </div>
+              <Button variant={showAlerts ? "default" : "outline"} size="sm" onClick={() => setShowAlerts(!showAlerts)}>
+                {showAlerts ? "Hide Alerts" : "View Alerts"}
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Alerts Panel (collapsible) */}
+      {showAlerts && (
+        <BreedingAlertsPanel
+          alerts={alerts}
+          criticalCount={criticalCount}
+          warningCount={warningCount}
+          upcomingCount={upcomingCount}
+          maxItems={15}
+        />
+      )}
+
       {/* Month Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Card className="bg-primary/5">

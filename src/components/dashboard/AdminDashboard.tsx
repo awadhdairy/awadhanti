@@ -4,7 +4,8 @@ import { StatCard } from "./StatCard";
 import { RecentActivityCard } from "./RecentActivityCard";
 import { QuickActionsCard } from "./QuickActionsCard";
 import { ProductionChart } from "./ProductionChart";
-import { AlertsCard } from "./AlertsCard";
+import { BreedingAlertsPanel } from "@/components/breeding/BreedingAlertsPanel";
+import { useBreedingAlerts } from "@/hooks/useBreedingAlerts";
 import { 
   Droplets, 
   Beef, 
@@ -13,6 +14,7 @@ import {
   Loader2
 } from "lucide-react";
 import { format, startOfMonth, endOfMonth } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardStats {
   todayProduction: number;
@@ -27,9 +29,45 @@ interface DashboardStats {
   pendingAmount: number;
 }
 
+interface Cattle {
+  id: string;
+  tag_number: string;
+  name: string | null;
+  status: string | null;
+  lactation_status: string | null;
+}
+
+interface BreedingRecord {
+  id: string;
+  cattle_id: string;
+  record_type: string;
+  record_date: string;
+  expected_calving_date: string | null;
+  heat_cycle_day: number | null;
+  pregnancy_confirmed: boolean | null;
+}
+
+interface HealthRecord {
+  id: string;
+  cattle_id: string;
+  record_type: string;
+  title: string;
+  next_due_date: string | null;
+}
+
 export function AdminDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [cattle, setCattle] = useState<Cattle[]>([]);
+  const [breedingRecords, setBreedingRecords] = useState<BreedingRecord[]>([]);
+  const [healthRecords, setHealthRecords] = useState<HealthRecord[]>([]);
+
+  const { alerts, criticalCount, warningCount, upcomingCount } = useBreedingAlerts(
+    breedingRecords,
+    healthRecords,
+    cattle
+  );
 
   useEffect(() => {
     fetchDashboardData();
@@ -40,14 +78,21 @@ export function AdminDashboard() {
     const monthStart = format(startOfMonth(new Date()), "yyyy-MM-dd");
     const monthEnd = format(endOfMonth(new Date()), "yyyy-MM-dd");
 
-    const [productionRes, cattleRes, customersRes, invoicesRes] = await Promise.all([
+    const [
+      productionRes,
+      cattleRes,
+      customersRes,
+      invoicesRes,
+      breedingRes,
+      healthRes,
+    ] = await Promise.all([
       supabase
         .from("milk_production")
         .select("session, quantity_liters")
         .eq("production_date", todayStr),
       supabase
         .from("cattle")
-        .select("status, lactation_status"),
+        .select("id, tag_number, name, status, lactation_status"),
       supabase
         .from("customers")
         .select("is_active"),
@@ -56,12 +101,24 @@ export function AdminDashboard() {
         .select("final_amount, paid_amount")
         .gte("created_at", monthStart)
         .lte("created_at", monthEnd),
+      supabase
+        .from("breeding_records")
+        .select("id, cattle_id, record_type, record_date, expected_calving_date, heat_cycle_day, pregnancy_confirmed"),
+      supabase
+        .from("cattle_health")
+        .select("id, cattle_id, record_type, title, next_due_date"),
     ]);
 
     const production = productionRes.data || [];
-    const cattle = cattleRes.data || [];
+    const cattleData = cattleRes.data || [];
     const customers = customersRes.data || [];
     const invoices = invoicesRes.data || [];
+    const breedingData = breedingRes.data || [];
+    const healthData = healthRes.data || [];
+
+    setCattle(cattleData);
+    setBreedingRecords(breedingData);
+    setHealthRecords(healthData);
 
     const morningProduction = production
       .filter(p => p.session === "morning")
@@ -71,15 +128,15 @@ export function AdminDashboard() {
       .filter(p => p.session === "evening")
       .reduce((sum, p) => sum + Number(p.quantity_liters), 0);
 
-    const activeCattle = cattle.filter(c => c.status === "active");
+    const activeCattle = cattleData.filter(c => c.status === "active");
     
     setStats({
       todayProduction: morningProduction + eveningProduction,
       morningProduction,
       eveningProduction,
       totalCattle: activeCattle.length,
-      lactatingCattle: cattle.filter(c => c.lactation_status === "lactating").length,
-      dryCattle: cattle.filter(c => c.lactation_status === "dry").length,
+      lactatingCattle: cattleData.filter(c => c.lactation_status === "lactating").length,
+      dryCattle: cattleData.filter(c => c.lactation_status === "dry").length,
       totalCustomers: customers.length,
       activeCustomers: customers.filter(c => c.is_active).length,
       monthlyRevenue: invoices.reduce((sum, i) => sum + Number(i.final_amount), 0),
@@ -142,7 +199,15 @@ export function AdminDashboard() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <AlertsCard />
+        <BreedingAlertsPanel
+          alerts={alerts}
+          criticalCount={criticalCount}
+          warningCount={warningCount}
+          upcomingCount={upcomingCount}
+          maxItems={8}
+          showViewAll={true}
+          onViewAll={() => navigate("/breeding")}
+        />
       </div>
     </div>
   );
