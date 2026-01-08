@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Badge } from "@/components/ui/badge";
+
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMilkHistory, MilkHistoryRecord, DailyProductionTotal } from "@/hooks/useMilkHistory";
 import { format } from "date-fns";
@@ -243,14 +243,14 @@ export function MilkHistoryDialog({
           <DialogDescription>{getDescription()}</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="30" onValueChange={(v) => setDays(parseInt(v))}>
+        <Tabs value={days.toString()} onValueChange={(v) => setDays(parseInt(v))}>
           <TabsList className="grid w-full grid-cols-3">
             <TabsTrigger value="7">7 Days</TabsTrigger>
             <TabsTrigger value="30">30 Days</TabsTrigger>
             <TabsTrigger value="90">90 Days</TabsTrigger>
           </TabsList>
 
-          <TabsContent value={days.toString()} className="mt-4">
+          <div className="mt-4">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -310,36 +310,36 @@ export function MilkHistoryDialog({
                 )}
               </ScrollArea>
             )}
-          </TabsContent>
+          </div>
         </Tabs>
 
         {/* Summary Stats */}
         {!loading && (
-          <div className="flex gap-4 pt-2 border-t">
+          <div className="flex flex-wrap gap-2 pt-2 border-t">
             {mode === "cattle" && cattleHistory.length > 0 && (
               <>
-                <Badge variant="secondary" className="gap-1">
+                <div className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
                   <Sun className="h-3 w-3" />
-                  Avg Morning: {(cattleHistory.reduce((sum, r) => sum + (r.morning || 0), 0) / cattleHistory.filter(r => r.morning !== null).length || 0).toFixed(1)}L
-                </Badge>
-                <Badge variant="secondary" className="gap-1">
+                  <span>Avg Morning: {(cattleHistory.reduce((sum, r) => sum + (r.morning || 0), 0) / (cattleHistory.filter(r => r.morning !== null).length || 1)).toFixed(1)}L</span>
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
                   <Moon className="h-3 w-3" />
-                  Avg Evening: {(cattleHistory.reduce((sum, r) => sum + (r.evening || 0), 0) / cattleHistory.filter(r => r.evening !== null).length || 0).toFixed(1)}L
-                </Badge>
-                <Badge variant="outline" className="gap-1">
+                  <span>Avg Evening: {(cattleHistory.reduce((sum, r) => sum + (r.evening || 0), 0) / (cattleHistory.filter(r => r.evening !== null).length || 1)).toFixed(1)}L</span>
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold">
                   <Droplets className="h-3 w-3" />
-                  Total: {cattleHistory.reduce((sum, r) => sum + r.total, 0).toFixed(1)}L
-                </Badge>
+                  <span>Total: {cattleHistory.reduce((sum, r) => sum + r.total, 0).toFixed(1)}L</span>
+                </div>
               </>
             )}
             {mode === "daily" && dailyTotals.length > 0 && (
               <>
-                <Badge variant="secondary" className="gap-1">
-                  Avg Daily: {(dailyTotals.reduce((sum, r) => sum + r.total, 0) / dailyTotals.length).toFixed(1)}L
-                </Badge>
-                <Badge variant="outline" className="gap-1">
-                  Total ({days} days): {dailyTotals.reduce((sum, r) => sum + r.total, 0).toFixed(1)}L
-                </Badge>
+                <div className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold bg-secondary text-secondary-foreground">
+                  <span>Avg Daily: {(dailyTotals.reduce((sum, r) => sum + r.total, 0) / dailyTotals.length).toFixed(1)}L</span>
+                </div>
+                <div className="inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-semibold">
+                  <span>Total ({days} days): {dailyTotals.reduce((sum, r) => sum + r.total, 0).toFixed(1)}L</span>
+                </div>
               </>
             )}
           </div>
