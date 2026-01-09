@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -7,8 +7,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
-
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useMilkHistory, MilkHistoryRecord, DailyProductionTotal } from "@/hooks/useMilkHistory";
 import { format } from "date-fns";
 import { 
@@ -198,17 +197,27 @@ export function MilkHistoryDialog({
 }: MilkHistoryDialogProps) {
   const { loading, cattleHistory, dailyTotals, fetchCattleHistory, fetchDailyTotals } = useMilkHistory();
   const [days, setDays] = useState<number>(30);
+  
+  // Use refs to store the fetch functions to avoid dependency issues
+  const fetchCattleHistoryRef = useRef(fetchCattleHistory);
+  const fetchDailyTotalsRef = useRef(fetchDailyTotals);
+  
+  // Keep refs updated
+  useEffect(() => {
+    fetchCattleHistoryRef.current = fetchCattleHistory;
+    fetchDailyTotalsRef.current = fetchDailyTotals;
+  });
 
   useEffect(() => {
     if (open) {
       if (mode === "cattle" && cattleId) {
-        fetchCattleHistory(cattleId, days);
+        fetchCattleHistoryRef.current(cattleId, days);
       } else if (mode === "daily") {
         const filter = sessionFilter === "total" ? undefined : sessionFilter;
-        fetchDailyTotals(days, filter);
+        fetchDailyTotalsRef.current(days, filter);
       }
     }
-  }, [open, mode, cattleId, days, sessionFilter, fetchCattleHistory, fetchDailyTotals]);
+  }, [open, mode, cattleId, days, sessionFilter]);
 
   const getTitle = () => {
     if (mode === "cattle") {
