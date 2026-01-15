@@ -31,92 +31,68 @@ const statusConfig = {
   partial: { color: 'bg-info', icon: Package, label: 'Partial' },
 };
 
-// Dummy delivery data
-const dummyDeliveries: Delivery[] = [
-  {
-    id: '1',
-    delivery_date: new Date().toISOString().split('T')[0],
-    status: 'delivered',
-    delivery_time: new Date().toISOString(),
-    notes: null,
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-      { product_name: 'Fresh Curd', quantity: 0.5, unit_price: 55, total_amount: 27.5 },
-    ]
-  },
-  {
-    id: '2',
-    delivery_date: format(subDays(new Date(), 1), 'yyyy-MM-dd'),
-    status: 'delivered',
-    delivery_time: format(subDays(new Date(), 1), "yyyy-MM-dd'T'06:30:00"),
-    notes: null,
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-      { product_name: 'Buffalo Milk', quantity: 1, unit_price: 70, total_amount: 70 },
-    ]
-  },
-  {
-    id: '3',
-    delivery_date: format(subDays(new Date(), 2), 'yyyy-MM-dd'),
-    status: 'delivered',
-    delivery_time: format(subDays(new Date(), 2), "yyyy-MM-dd'T'06:15:00"),
-    notes: 'Left at doorstep',
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-    ]
-  },
-  {
-    id: '4',
-    delivery_date: format(subDays(new Date(), 3), 'yyyy-MM-dd'),
-    status: 'missed',
-    delivery_time: null,
-    notes: 'Customer not available',
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-      { product_name: 'Fresh Curd', quantity: 0.5, unit_price: 55, total_amount: 27.5 },
-    ]
-  },
-  {
-    id: '5',
-    delivery_date: format(subDays(new Date(), 4), 'yyyy-MM-dd'),
-    status: 'delivered',
-    delivery_time: format(subDays(new Date(), 4), "yyyy-MM-dd'T'06:45:00"),
-    notes: null,
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-      { product_name: 'Buffalo Milk', quantity: 1, unit_price: 70, total_amount: 70 },
-      { product_name: 'Fresh Curd', quantity: 0.5, unit_price: 55, total_amount: 27.5 },
-    ]
-  },
-  {
-    id: '6',
-    delivery_date: format(subDays(new Date(), 5), 'yyyy-MM-dd'),
-    status: 'partial',
-    delivery_time: format(subDays(new Date(), 5), "yyyy-MM-dd'T'07:00:00"),
-    notes: 'Only milk delivered, curd out of stock',
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-    ]
-  },
-  {
-    id: '7',
-    delivery_date: format(subDays(new Date(), 6), 'yyyy-MM-dd'),
-    status: 'delivered',
-    delivery_time: format(subDays(new Date(), 6), "yyyy-MM-dd'T'06:20:00"),
-    notes: null,
-    items: [
-      { product_name: 'Full Cream Milk', quantity: 2, unit_price: 60, total_amount: 120 },
-      { product_name: 'Fresh Curd', quantity: 1, unit_price: 55, total_amount: 55 },
-    ]
-  },
-];
 
 export default function CustomerDeliveries() {
   const { customerId } = useCustomerAuth();
-  const [deliveries, setDeliveries] = useState<Delivery[]>(dummyDeliveries);
-  const [loading, setLoading] = useState(false);
+  const [deliveries, setDeliveries] = useState<Delivery[]>([]);
+  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState(7); // Days to show
+
+  useEffect(() => {
+    const fetchDeliveries = async () => {
+      if (!customerId) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const startDate = format(subDays(new Date(), 30), 'yyyy-MM-dd');
+        const { data, error } = await supabase
+          .from('deliveries')
+          .select(`
+            id,
+            delivery_date,
+            status,
+            delivery_time,
+            notes,
+            delivery_items (
+              quantity,
+              unit_price,
+              total_amount,
+              products (name)
+            )
+          `)
+          .eq('customer_id', customerId)
+          .gte('delivery_date', startDate)
+          .order('delivery_date', { ascending: false });
+
+        if (error) throw error;
+
+        const formattedDeliveries: Delivery[] = (data || []).map((d: any) => ({
+          id: d.id,
+          delivery_date: d.delivery_date,
+          status: d.status || 'pending',
+          delivery_time: d.delivery_time,
+          notes: d.notes,
+          items: (d.delivery_items || []).map((item: any) => ({
+            product_name: item.products?.name || 'Unknown Product',
+            quantity: item.quantity,
+            unit_price: item.unit_price,
+            total_amount: item.total_amount,
+          })),
+        }));
+
+        setDeliveries(formattedDeliveries);
+      } catch (err) {
+        console.error('Error fetching deliveries:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchDeliveries();
+  }, [customerId]);
 
   // Filter deliveries based on date range
   const filteredDeliveries = deliveries.filter(d => {

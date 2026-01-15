@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { User, Phone, MapPin, Mail, Lock, LogOut, HelpCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -10,13 +10,12 @@ import { useToast } from '@/hooks/use-toast';
 import { useCustomerAuth } from '@/hooks/useCustomerAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { useNavigate } from 'react-router-dom';
-
-// Dummy customer data for display
-const dummyCustomerData = {
-  name: 'Rajesh Kumar',
-  phone: '9876543210',
-  email: 'rajesh.kumar@gmail.com',
-  address: 'Flat 402, Green Valley Apartments, Sector 15, Gurgaon - 122001'
+// Fallback for loading state
+const fallbackData = {
+  name: 'Loading...',
+  phone: '',
+  email: '',
+  address: ''
 };
 
 export default function CustomerProfile() {
@@ -25,14 +24,23 @@ export default function CustomerProfile() {
   const navigate = useNavigate();
   const [editing, setEditing] = useState(false);
   
-  // Use dummy data if customerData is null
-  const displayData = customerData || dummyCustomerData;
+  // Use fallback data if customerData is loading
+  const displayData = customerData || fallbackData;
   
-  const [name, setName] = useState(displayData.name || '');
-  const [email, setEmail] = useState(displayData.email || '');
-  const [address, setAddress] = useState(displayData.address || '');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
   const [currentPin, setCurrentPin] = useState('');
   const [newPin, setNewPin] = useState('');
+
+  // Update form fields when customerData loads
+  useEffect(() => {
+    if (customerData) {
+      setName(customerData.name || '');
+      setEmail(customerData.email || '');
+      setAddress(customerData.address || '');
+    }
+  }, [customerData]);
   const [saving, setSaving] = useState(false);
 
   const handleSaveProfile = async () => {
