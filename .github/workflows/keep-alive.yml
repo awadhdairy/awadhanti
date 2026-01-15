@@ -10,12 +10,21 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Supabase Database
+      - name: Ping Health Check Endpoint
         run: |
-          # Simple read-only query to keep the database active
-          # Using the public anon key - this is safe as it only reads public data
-          curl -s -X GET \
-            "https://eqedibnoatuxczjwkbbx.supabase.co/rest/v1/dairy_settings_public?select=dairy_name&limit=1" \
-            -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVxZWRpYm5vYXR1eGN6andrYmJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwNjY2ODksImV4cCI6MjA4MjY0MjY4OX0.2E9PVhVL_4WAWIaAo4JCVnrYLR1XKBHlETqbYuy0XRo" \
-            -H "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVxZWRpYm5vYXR1eGN6andrYmJ4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjcwNjY2ODksImV4cCI6MjA4MjY0MjY4OX0.2E9PVhVL_4WAWIaAo4JCVnrYLR1XKBHlETqbYuy0XRo"
-          echo "Keep-alive ping completed at $(date -u)"
+          # Ping the health-check edge function to keep the database active
+          response=$(curl -s -w "\n%{http_code}" \
+            "https://eqedibnoatuxczjwkbbx.supabase.co/functions/v1/health-check")
+          
+          http_code=$(echo "$response" | tail -1)
+          body=$(echo "$response" | head -n -1)
+          
+          echo "Response: $body"
+          echo "HTTP Status: $http_code"
+          
+          if [ "$http_code" -ge 200 ] && [ "$http_code" -lt 300 ]; then
+            echo "✅ Keep-alive ping successful at $(date -u)"
+          else
+            echo "❌ Keep-alive ping failed with status $http_code"
+            exit 1
+          fi
