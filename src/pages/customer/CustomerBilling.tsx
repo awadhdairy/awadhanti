@@ -61,9 +61,9 @@ export default function CustomerBilling() {
           .limit(12);
 
         if (invoiceError) throw invoiceError;
-        setInvoices((invoiceData || []).map((inv: any) => ({
+        setInvoices((invoiceData || []).map((inv) => ({
           ...inv,
-          payment_status: inv.payment_status || 'pending',
+          payment_status: (inv.payment_status || 'pending') as Invoice['payment_status'],
         })));
 
         // Fetch ledger entries
@@ -75,7 +75,7 @@ export default function CustomerBilling() {
           .limit(30);
 
         if (ledgerError) throw ledgerError;
-        setLedger((ledgerData || []).map((entry: any) => ({
+        setLedger((ledgerData || []).map((entry) => ({
           id: entry.id,
           transaction_date: entry.transaction_date,
           transaction_type: entry.transaction_type,

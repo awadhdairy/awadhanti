@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { InsightsSkeleton } from "@/components/common/LoadingSkeleton";
+import { getCattleTag, getCattleName } from "@/lib/supabase-helpers";
 
 interface CattlePerformance {
   cattle_id: string;
@@ -80,10 +81,9 @@ async function fetchProductionInsights() {
   const dailyTotals = new Map<string, number>();
 
   production.forEach(p => {
-    const cattle = p.cattle as any;
     const existing = cattleMap.get(p.cattle_id) || {
-      tag_number: cattle?.tag_number || "Unknown",
-      name: cattle?.name || null,
+      tag_number: getCattleTag(p.cattle),
+      name: getCattleName(p.cattle),
       firstHalfTotal: 0,
       secondHalfTotal: 0,
       firstHalfDays: new Set<string>(),

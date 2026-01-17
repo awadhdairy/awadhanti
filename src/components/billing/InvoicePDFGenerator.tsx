@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -36,6 +36,17 @@ interface DeliveryItem {
   unit_price: number;
   total_amount: number;
   delivery_date: string;
+}
+
+// Type for Supabase delivery query result
+interface DeliveryQueryResult {
+  delivery_date: string;
+  delivery_items: Array<{
+    quantity: number;
+    unit_price: number;
+    total_amount: number;
+    product: { name: string } | null;
+  }> | null;
 }
 
 interface Invoice {
@@ -121,10 +132,11 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
         .lte("delivery_date", invoice.billing_period_end)
         .eq("status", "delivered");
 
-      // Flatten delivery items
+      // Flatten delivery items with proper typing
       const items: DeliveryItem[] = [];
-      (deliveries || []).forEach((delivery: any) => {
-        (delivery.delivery_items || []).forEach((item: any) => {
+      const typedDeliveries = (deliveries || []) as DeliveryQueryResult[];
+      typedDeliveries.forEach((delivery) => {
+        (delivery.delivery_items || []).forEach((item) => {
           items.push({
             product_name: item.product?.name || "Product",
             quantity: item.quantity,
