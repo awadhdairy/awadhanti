@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, endOfMonth, addDays } from "date-fns";
+import { format, endOfMonth, addDays } from "date-fns";
+import { getProductPrice } from "@/lib/supabase-helpers";
 
 interface DeliveryItem {
   product_id: string;
@@ -126,7 +127,7 @@ export function useAutoInvoiceGenerator() {
         .eq("is_active", true);
 
       subscriptions?.forEach(sub => {
-        const price = sub.custom_price || (sub.product as any)?.base_price || 0;
+        const price = sub.custom_price || getProductPrice(sub.product);
         const itemTotal = price * sub.quantity * deliveries.length;
         itemsMap.set(sub.product_id, {
           product_id: sub.product_id,

@@ -39,6 +39,13 @@ interface DeliverySummary {
   has_invoice: boolean;
 }
 
+// Type for delivery query with customer and items
+interface DeliveryWithCustomer {
+  customer_id: string;
+  customers: { name: string } | null;
+  delivery_items: Array<{ total_amount: number }> | null;
+}
+
 interface BulkInvoiceGeneratorProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -116,14 +123,15 @@ export function BulkInvoiceGenerator({
 
     const invoicedCustomers = new Set(existingInvoices?.map((i) => i.customer_id) || []);
 
-    // Aggregate by customer
+    // Aggregate by customer with proper typing
     const customerMap = new Map<string, DeliverySummary>();
+    const typedDeliveries = (deliveries || []) as DeliveryWithCustomer[];
     
-    (deliveries || []).forEach((delivery: any) => {
+    typedDeliveries.forEach((delivery) => {
       const customerId = delivery.customer_id;
       const customerName = delivery.customers?.name || "Unknown";
       const deliveryTotal = (delivery.delivery_items || []).reduce(
-        (sum: number, item: any) => sum + Number(item.total_amount),
+        (sum, item) => sum + Number(item.total_amount),
         0
       );
 

@@ -8,7 +8,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -35,13 +34,15 @@ interface BreedingRecord {
   pregnancy_confirmed: boolean | null;
   expected_calving_date: string | null;
   actual_calving_date: string | null;
-  calf_details: any;
+  calf_details: unknown;
   notes: string | null;
   created_at: string;
   cattle?: Cattle;
 }
 
-const recordTypeLabels: Record<string, { label: string; color: string; icon: any }> = {
+import type { LucideIcon } from "lucide-react";
+
+const recordTypeLabels: Record<string, { label: string; color: string; icon: LucideIcon }> = {
   heat_detection: { label: "Heat Detection", color: "bg-breeding-heat", icon: Heart },
   artificial_insemination: { label: "Artificial Insemination", color: "bg-breeding-insemination", icon: Syringe },
   pregnancy_check: { label: "Pregnancy Check", color: "bg-breeding-pregnancy", icon: AlertCircle },

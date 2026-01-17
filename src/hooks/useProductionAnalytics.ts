@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subDays, parseISO, differenceInDays } from "date-fns";
+import { format, subDays } from "date-fns";
+import { getCattleTag, getCattleName } from "@/lib/supabase-helpers";
 
 interface CattlePerformance {
   cattle_id: string;
@@ -83,10 +84,9 @@ export function useProductionAnalytics() {
       }>();
 
       production.forEach(p => {
-        const cattle = p.cattle as any;
         const existing = cattleMap.get(p.cattle_id) || {
-          tag_number: cattle?.tag_number || "Unknown",
-          name: cattle?.name || null,
+          tag_number: getCattleTag(p.cattle),
+          name: getCattleName(p.cattle),
           firstHalfTotal: 0,
           secondHalfTotal: 0,
           firstHalfDays: new Set<string>(),

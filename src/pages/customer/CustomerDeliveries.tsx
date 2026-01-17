@@ -25,6 +25,21 @@ interface Delivery {
   items: DeliveryItem[];
 }
 
+// Type for Supabase delivery query result
+interface DeliveryQueryResult {
+  id: string;
+  delivery_date: string;
+  status: string | null;
+  delivery_time: string | null;
+  notes: string | null;
+  delivery_items: Array<{
+    quantity: number;
+    unit_price: number;
+    total_amount: number;
+    products: { name: string } | null;
+  }> | null;
+}
+
 const statusConfig = {
   pending: { color: 'bg-warning', icon: Clock, label: 'Pending' },
   delivered: { color: 'bg-success', icon: Check, label: 'Delivered' },
@@ -70,13 +85,14 @@ export default function CustomerDeliveries() {
 
         if (error) throw error;
 
-        const formattedDeliveries: Delivery[] = (data || []).map((d: any) => ({
+        const typedData = (data || []) as DeliveryQueryResult[];
+        const formattedDeliveries: Delivery[] = typedData.map((d) => ({
           id: d.id,
           delivery_date: d.delivery_date,
-          status: d.status || 'pending',
+          status: (d.status || 'pending') as Delivery['status'],
           delivery_time: d.delivery_time,
           notes: d.notes,
-          items: (d.delivery_items || []).map((item: any) => ({
+          items: (d.delivery_items || []).map((item) => ({
             product_name: item.products?.name || 'Unknown Product',
             quantity: item.quantity,
             unit_price: item.unit_price,

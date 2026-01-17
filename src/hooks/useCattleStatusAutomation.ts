@@ -112,7 +112,8 @@ export function useCattleStatusAutomation() {
       for (const cow of cattle || []) {
         const breeding = breedingByCattle.get(cow.id);
         const lastProductionDate = productionByCattle.get(cow.id);
-        let newLactationStatus: string | null = null;
+        type LactationStatus = "lactating" | "dry" | "pregnant" | "calving";
+        let newLactationStatus: LactationStatus | null = null;
         let reason = "";
 
         // Rule 1: Dry-off required (60 days before calving)
@@ -144,7 +145,7 @@ export function useCattleStatusAutomation() {
         if (newLactationStatus && newLactationStatus !== cow.lactation_status) {
           const { error } = await supabase
             .from("cattle")
-            .update({ lactation_status: newLactationStatus as any })
+            .update({ lactation_status: newLactationStatus })
             .eq("id", cow.id);
 
           if (error) {
@@ -164,8 +165,8 @@ export function useCattleStatusAutomation() {
       }
 
       return result;
-    } catch (error: any) {
-      result.errors.push(`Unexpected error: ${error.message}`);
+    } catch (error) {
+      result.errors.push(`Unexpected error: ${error instanceof Error ? error.message : 'Unknown error'}`);
       return result;
     }
   }, []);
