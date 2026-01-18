@@ -72,37 +72,42 @@ export default function ProductionPage() {
   const fetchData = async () => {
     setLoading(true);
     
-    // Fetch cattle
-    const { data: cattleData } = await supabase
-      .from("cattle")
-      .select("id, tag_number, name")
-      .eq("status", "active")
-      .in("lactation_status", ["lactating"])
-      .order("tag_number");
+    try {
+      // Fetch cattle and productions in parallel for faster loading
+      const [cattleRes, productionRes] = await Promise.all([
+        supabase
+          .from("cattle")
+          .select("id, tag_number, name")
+          .eq("status", "active")
+          .in("lactation_status", ["lactating"])
+          .order("tag_number"),
+        supabase
+          .from("milk_production")
+          .select(`
+            *,
+            cattle:cattle_id (id, tag_number, name)
+          `)
+          .order("production_date", { ascending: false })
+          .order("session", { ascending: false })
+          .limit(100)
+      ]);
 
-    setCattle(cattleData || []);
+      setCattle(cattleRes.data || []);
 
-    // Fetch productions with cattle info
-    const { data: productionData, error } = await supabase
-      .from("milk_production")
-      .select(`
-        *,
-        cattle:cattle_id (id, tag_number, name)
-      `)
-      .order("production_date", { ascending: false })
-      .order("session", { ascending: false })
-      .limit(100);
-
-    if (error) {
-      toast({
-        title: "Error fetching data",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      setProductions((productionData as ProductionWithCattle[]) || []);
+      if (productionRes.error) {
+        toast({
+          title: "Error fetching data",
+          description: productionRes.error.message,
+          variant: "destructive",
+        });
+      } else {
+        setProductions((productionRes.data as ProductionWithCattle[]) || []);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const handleOpenDialog = async () => {

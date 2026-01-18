@@ -79,34 +79,39 @@ export default function BillingPage() {
   const fetchData = async () => {
     setLoading(true);
     
-    // Fetch customers
-    const { data: customerData } = await supabase
-      .from("customers")
-      .select("id, name")
-      .eq("is_active", true)
-      .order("name");
+    try {
+      // Fetch customers and invoices in parallel for faster loading
+      const [customerRes, invoiceRes] = await Promise.all([
+        supabase
+          .from("customers")
+          .select("id, name")
+          .eq("is_active", true)
+          .order("name"),
+        supabase
+          .from("invoices")
+          .select(`
+            *,
+            customer:customer_id (id, name)
+          `)
+          .order("created_at", { ascending: false })
+      ]);
 
-    setCustomers(customerData || []);
+      setCustomers(customerRes.data || []);
 
-    // Fetch invoices
-    const { data: invoiceData, error } = await supabase
-      .from("invoices")
-      .select(`
-        *,
-        customer:customer_id (id, name)
-      `)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      toast({
-        title: "Error fetching invoices",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      setInvoices((invoiceData as InvoiceWithCustomer[]) || []);
+      if (invoiceRes.error) {
+        toast({
+          title: "Error fetching invoices",
+          description: invoiceRes.error.message,
+          variant: "destructive",
+        });
+      } else {
+        setInvoices((invoiceRes.data as InvoiceWithCustomer[]) || []);
+      }
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   const generateInvoiceNumber = () => {

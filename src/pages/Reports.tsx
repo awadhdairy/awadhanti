@@ -4,7 +4,6 @@ import { PageHeader } from "@/components/common/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { useToast } from "@/hooks/use-toast";
 import { 
   BarChart3, 
   Droplets, 
@@ -14,8 +13,7 @@ import {
   TrendingUp, 
   TrendingDown,
   Download,
-  Loader2,
-  Calendar
+  Loader2
 } from "lucide-react";
 import { 
   BarChart, 
@@ -28,12 +26,10 @@ import {
   PieChart,
   Pie,
   Cell,
-  LineChart,
-  Line,
   Area,
   AreaChart
 } from "recharts";
-import { format, subDays, startOfMonth, endOfMonth, eachDayOfInterval } from "date-fns";
+import { format, subDays, startOfMonth, eachDayOfInterval } from "date-fns";
 
 const COLORS = ['hsl(152, 45%, 28%)', 'hsl(158, 50%, 45%)', 'hsl(38, 92%, 50%)', 'hsl(199, 89%, 48%)', 'hsl(0, 72%, 51%)'];
 
@@ -44,7 +40,6 @@ export default function ReportsPage() {
   const [expenseData, setExpenseData] = useState<any[]>([]);
   const [cattleStats, setCattleStats] = useState<any>({});
   const [customerStats, setCustomerStats] = useState<any>({});
-  const { toast } = useToast();
 
   useEffect(() => {
     fetchReportData();
@@ -58,81 +53,86 @@ export default function ReportsPage() {
       end: new Date(),
     });
 
-    // Fetch milk production
-    const { data: production } = await supabase
-      .from("milk_production")
-      .select("production_date, session, quantity_liters")
-      .gte("production_date", format(subDays(new Date(), 29), "yyyy-MM-dd"));
+    try {
+      // Fetch all data in parallel for faster loading
+      const [productionRes, invoicesRes, expensesRes, cattleRes, customersRes] = await Promise.all([
+        supabase
+          .from("milk_production")
+          .select("production_date, session, quantity_liters")
+          .gte("production_date", format(subDays(new Date(), 29), "yyyy-MM-dd")),
+        supabase
+          .from("invoices")
+          .select("created_at, final_amount, paid_amount")
+          .gte("created_at", format(startOfMonth(new Date()), "yyyy-MM-dd")),
+        supabase
+          .from("expenses")
+          .select("category, amount, expense_date")
+          .gte("expense_date", format(startOfMonth(new Date()), "yyyy-MM-dd")),
+        supabase.from("cattle").select("status, lactation_status"),
+        supabase.from("customers").select("is_active, credit_balance, advance_balance")
+      ]);
 
-    // Group production by date
-    const productionByDate = last30Days.map(date => {
-      const dateStr = format(date, "yyyy-MM-dd");
-      const dayProduction = production?.filter(p => p.production_date === dateStr) || [];
-      const morning = dayProduction.filter(p => p.session === "morning").reduce((sum, p) => sum + Number(p.quantity_liters), 0);
-      const evening = dayProduction.filter(p => p.session === "evening").reduce((sum, p) => sum + Number(p.quantity_liters), 0);
-      return {
-        date: format(date, "dd MMM"),
-        morning,
-        evening,
-        total: morning + evening,
-      };
-    });
-    setProductionData(productionByDate);
+      // Process production data
+      const production = productionRes.data || [];
+      const productionByDate = last30Days.map(date => {
+        const dateStr = format(date, "yyyy-MM-dd");
+        const dayProduction = production.filter(p => p.production_date === dateStr);
+        const morning = dayProduction.filter(p => p.session === "morning").reduce((sum, p) => sum + Number(p.quantity_liters), 0);
+        const evening = dayProduction.filter(p => p.session === "evening").reduce((sum, p) => sum + Number(p.quantity_liters), 0);
+        return {
+          date: format(date, "dd MMM"),
+          morning,
+          evening,
+          total: morning + evening,
+        };
+      });
+      setProductionData(productionByDate);
 
-    // Fetch revenue (invoices)
-    const { data: invoices } = await supabase
-      .from("invoices")
-      .select("created_at, final_amount, paid_amount")
-      .gte("created_at", format(startOfMonth(new Date()), "yyyy-MM-dd"));
+      // Process invoice data
+      const invoices = invoicesRes.data || [];
+      const monthlyRevenue = invoices.reduce((sum, i) => sum + Number(i.final_amount), 0);
+      const monthlyCollected = invoices.reduce((sum, i) => sum + Number(i.paid_amount), 0);
+      setRevenueData([
+        { name: "Billed", value: monthlyRevenue },
+        { name: "Collected", value: monthlyCollected },
+        { name: "Pending", value: monthlyRevenue - monthlyCollected },
+      ]);
 
-    const monthlyRevenue = invoices?.reduce((sum, i) => sum + Number(i.final_amount), 0) || 0;
-    const monthlyCollected = invoices?.reduce((sum, i) => sum + Number(i.paid_amount), 0) || 0;
+      // Process expense data
+      const expenses = expensesRes.data || [];
+      const expenseByCategory = expenses.reduce((acc, e) => {
+        acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
+        return acc;
+      }, {} as Record<string, number>);
+      const expenseChartData = Object.entries(expenseByCategory).map(([name, value]) => ({
+        name: name.charAt(0).toUpperCase() + name.slice(1).replace("_", " "),
+        value,
+      }));
+      setExpenseData(expenseChartData);
 
-    // Fetch expenses
-    const { data: expenses } = await supabase
-      .from("expenses")
-      .select("category, amount, expense_date")
-      .gte("expense_date", format(startOfMonth(new Date()), "yyyy-MM-dd"));
+      // Process cattle stats
+      const cattle = cattleRes.data || [];
+      setCattleStats({
+        total: cattle.length,
+        active: cattle.filter(c => c.status === "active").length,
+        lactating: cattle.filter(c => c.lactation_status === "lactating").length,
+        pregnant: cattle.filter(c => c.lactation_status === "pregnant").length,
+        dry: cattle.filter(c => c.lactation_status === "dry").length,
+      });
 
-    const expenseByCategory = expenses?.reduce((acc, e) => {
-      acc[e.category] = (acc[e.category] || 0) + Number(e.amount);
-      return acc;
-    }, {} as Record<string, number>) || {};
-
-    const expenseChartData = Object.entries(expenseByCategory).map(([name, value]) => ({
-      name: name.charAt(0).toUpperCase() + name.slice(1).replace("_", " "),
-      value,
-    }));
-    setExpenseData(expenseChartData);
-
-    setRevenueData([
-      { name: "Billed", value: monthlyRevenue },
-      { name: "Collected", value: monthlyCollected },
-      { name: "Pending", value: monthlyRevenue - monthlyCollected },
-    ]);
-
-    // Fetch cattle stats
-    const { data: cattle } = await supabase.from("cattle").select("status, lactation_status");
-    const cattleStatsSummary = {
-      total: cattle?.length || 0,
-      active: cattle?.filter(c => c.status === "active").length || 0,
-      lactating: cattle?.filter(c => c.lactation_status === "lactating").length || 0,
-      pregnant: cattle?.filter(c => c.lactation_status === "pregnant").length || 0,
-      dry: cattle?.filter(c => c.lactation_status === "dry").length || 0,
-    };
-    setCattleStats(cattleStatsSummary);
-
-    // Fetch customer stats
-    const { data: customers } = await supabase.from("customers").select("is_active, credit_balance, advance_balance");
-    const customerStatsSummary = {
-      total: customers?.length || 0,
-      active: customers?.filter(c => c.is_active).length || 0,
-      totalDue: customers?.reduce((sum, c) => sum + Number(c.credit_balance), 0) || 0,
-      totalAdvance: customers?.reduce((sum, c) => sum + Number(c.advance_balance), 0) || 0,
-    };
-    setCustomerStats(customerStatsSummary);
-
-    setLoading(false);
+      // Process customer stats
+      const customers = customersRes.data || [];
+      setCustomerStats({
+        total: customers.length,
+        active: customers.filter(c => c.is_active).length,
+        totalDue: customers.reduce((sum, c) => sum + Number(c.credit_balance), 0),
+        totalAdvance: customers.reduce((sum, c) => sum + Number(c.advance_balance), 0),
+      });
+    } catch (error) {
+      console.error("Error fetching report data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const totalProduction = productionData.reduce((sum, d) => sum + d.total, 0);

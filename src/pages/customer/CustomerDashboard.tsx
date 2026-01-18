@@ -49,22 +49,42 @@ export default function CustomerDashboard() {
     if (!customerId) return;
     
     setLoading(true);
+    const today = new Date().toISOString().split('T')[0];
+    
     try {
-      // Fetch subscription items
-      const { data: subscriptions, error: subError } = await supabase
-        .from('customer_products')
-        .select(`
-          id,
-          quantity,
-          custom_price,
-          is_active,
-          products (name)
-        `)
-        .eq('customer_id', customerId);
+      // Fetch all data in parallel for faster loading
+      const [subscriptionsRes, deliveriesRes, vacationRes] = await Promise.all([
+        supabase
+          .from('customer_products')
+          .select(`
+            id,
+            quantity,
+            custom_price,
+            is_active,
+            products (name)
+          `)
+          .eq('customer_id', customerId),
+        supabase
+          .from('deliveries')
+          .select('id, status')
+          .eq('customer_id', customerId)
+          .eq('delivery_date', today),
+        supabase
+          .from('customer_vacations')
+          .select('id')
+          .eq('customer_id', customerId)
+          .eq('is_active', true)
+          .lte('start_date', today)
+          .gte('end_date', today)
+          .maybeSingle()
+      ]);
 
-      if (subError) throw subError;
+      if (subscriptionsRes.error) throw subscriptionsRes.error;
+      if (deliveriesRes.error) throw deliveriesRes.error;
+      if (vacationRes.error) throw vacationRes.error;
 
-      const formattedSubs: SubscriptionItem[] = (subscriptions || []).map(sub => ({
+      // Process subscriptions
+      const formattedSubs: SubscriptionItem[] = (subscriptionsRes.data || []).map(sub => ({
         id: sub.id,
         product_name: getProductName(sub.products),
         quantity: sub.quantity,
@@ -73,36 +93,18 @@ export default function CustomerDashboard() {
       }));
       setSubscriptionItems(formattedSubs);
 
-      // Fetch today's deliveries
-      const today = new Date().toISOString().split('T')[0];
-      const { data: deliveries, error: delError } = await supabase
-        .from('deliveries')
-        .select('id, status')
-        .eq('customer_id', customerId)
-        .eq('delivery_date', today);
-
-      if (delError) throw delError;
-
-      const delivered = (deliveries || []).filter(d => d.status === 'delivered').length;
-      const pending = (deliveries || []).filter(d => d.status === 'pending').length;
+      // Process deliveries
+      const deliveries = deliveriesRes.data || [];
+      const delivered = deliveries.filter(d => d.status === 'delivered').length;
+      const pending = deliveries.filter(d => d.status === 'pending').length;
       setDeliverySummary({
         delivered,
         pending,
-        total: deliveries?.length || 0
+        total: deliveries.length
       });
 
-      // Check vacation status
-      const { data: vacation, error: vacError } = await supabase
-        .from('customer_vacations')
-        .select('id')
-        .eq('customer_id', customerId)
-        .eq('is_active', true)
-        .lte('start_date', today)
-        .gte('end_date', today)
-        .maybeSingle();
-
-      if (vacError) throw vacError;
-      setIsOnVacation(!!vacation);
+      // Process vacation status
+      setIsOnVacation(!!vacationRes.data);
 
     } catch (error) {
       console.error('Error fetching dashboard data:', error);
