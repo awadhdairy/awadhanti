@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'react';
 import { format } from 'date-fns';
-import { Receipt, Download, ChevronRight, CreditCard, AlertCircle } from 'lucide-react';
+import { Receipt, CreditCard, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useCustomerAuth } from '@/hooks/useCustomerAuth';
@@ -52,30 +51,31 @@ export default function CustomerBilling() {
       }
 
       try {
-        // Fetch invoices
-        const { data: invoiceData, error: invoiceError } = await supabase
-          .from('invoices')
-          .select('*')
-          .eq('customer_id', customerId)
-          .order('billing_period_end', { ascending: false })
-          .limit(12);
+        // Fetch invoices and ledger entries in parallel for faster loading
+        const [invoiceRes, ledgerRes] = await Promise.all([
+          supabase
+            .from('invoices')
+            .select('*')
+            .eq('customer_id', customerId)
+            .order('billing_period_end', { ascending: false })
+            .limit(12),
+          supabase
+            .from('customer_ledger')
+            .select('*')
+            .eq('customer_id', customerId)
+            .order('transaction_date', { ascending: false })
+            .limit(30)
+        ]);
 
-        if (invoiceError) throw invoiceError;
-        setInvoices((invoiceData || []).map((inv) => ({
+        if (invoiceRes.error) throw invoiceRes.error;
+        if (ledgerRes.error) throw ledgerRes.error;
+
+        setInvoices((invoiceRes.data || []).map((inv) => ({
           ...inv,
           payment_status: (inv.payment_status || 'pending') as Invoice['payment_status'],
         })));
 
-        // Fetch ledger entries
-        const { data: ledgerData, error: ledgerError } = await supabase
-          .from('customer_ledger')
-          .select('*')
-          .eq('customer_id', customerId)
-          .order('transaction_date', { ascending: false })
-          .limit(30);
-
-        if (ledgerError) throw ledgerError;
-        setLedger((ledgerData || []).map((entry) => ({
+        setLedger((ledgerRes.data || []).map((entry) => ({
           id: entry.id,
           transaction_date: entry.transaction_date,
           transaction_type: entry.transaction_type,

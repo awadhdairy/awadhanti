@@ -78,46 +78,48 @@ export default function DeliveriesPage() {
   const fetchData = async () => {
     setLoading(true);
     
-    // Fetch customers
-    const { data: customerData } = await supabase
-      .from("customers")
-      .select("id, name, area")
-      .eq("is_active", true)
-      .order("name");
+    try {
+      // Fetch all data in parallel for faster loading
+      const [customerRes, deliveryRes, vacationRes] = await Promise.all([
+        supabase
+          .from("customers")
+          .select("id, name, area")
+          .eq("is_active", true)
+          .order("name"),
+        supabase
+          .from("deliveries")
+          .select(`
+            *,
+            customer:customer_id (id, name, area)
+          `)
+          .eq("delivery_date", selectedDate)
+          .order("created_at", { ascending: false }),
+        supabase
+          .from("customer_vacations")
+          .select("customer_id")
+          .eq("is_active", true)
+          .lte("start_date", selectedDate)
+          .gte("end_date", selectedDate)
+      ]);
 
-    setCustomers(customerData || []);
+      setCustomers(customerRes.data || []);
 
-    // Fetch deliveries for selected date
-    const { data: deliveryData, error } = await supabase
-      .from("deliveries")
-      .select(`
-        *,
-        customer:customer_id (id, name, area)
-      `)
-      .eq("delivery_date", selectedDate)
-      .order("created_at", { ascending: false });
+      if (deliveryRes.error) {
+        toast({
+          title: "Error fetching deliveries",
+          description: deliveryRes.error.message,
+          variant: "destructive",
+        });
+      } else {
+        setDeliveries((deliveryRes.data as DeliveryWithCustomer[]) || []);
+      }
 
-    if (error) {
-      toast({
-        title: "Error fetching deliveries",
-        description: error.message,
-        variant: "destructive",
-      });
-    } else {
-      setDeliveries((deliveryData as DeliveryWithCustomer[]) || []);
+      setVacationCustomers(new Set((vacationRes.data || []).map(v => v.customer_id)));
+    } catch (error) {
+      console.error("Error fetching data:", error);
+    } finally {
+      setLoading(false);
     }
-
-    // Fetch customers on vacation for the selected date
-    const { data: vacationData } = await supabase
-      .from("customer_vacations")
-      .select("customer_id")
-      .eq("is_active", true)
-      .lte("start_date", selectedDate)
-      .gte("end_date", selectedDate);
-
-    setVacationCustomers(new Set((vacationData || []).map(v => v.customer_id)));
-
-    setLoading(false);
   };
 
   const handleCreateDelivery = async () => {
