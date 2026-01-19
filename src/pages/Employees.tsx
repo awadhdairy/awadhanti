@@ -5,6 +5,7 @@ import { useAutoAttendance } from "@/hooks/useAutoAttendance";
 import { useExpenseAutomation } from "@/hooks/useExpenseAutomation";
 import { PageHeader } from "@/components/common/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
+import { EmployeeDetailDialog } from "@/components/employees/EmployeeDetailDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -13,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, DollarSign, Clock, Users, CheckCircle, XCircle, Loader2 } from "lucide-react";
+import { Plus, Calendar, DollarSign, Clock, Users, CheckCircle, XCircle, Loader2, Eye } from "lucide-react";
 import { format } from "date-fns";
 
 interface Employee {
@@ -84,6 +85,8 @@ export default function EmployeesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [payrollDialogOpen, setPayrollDialogOpen] = useState(false);
+  const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState<Employee | null>(null);
+  const [employeeDetailOpen, setEmployeeDetailOpen] = useState(false);
   
   // Form states
   const [selectedEmployee, setSelectedEmployee] = useState("");
@@ -320,8 +323,25 @@ export default function EmployeesPage() {
     },
   ];
 
+  const handleViewEmployee = (employee: Employee) => {
+    setSelectedEmployeeDetail(employee);
+    setEmployeeDetailOpen(true);
+  };
+
   const employeeColumns = [
-    { key: "name" as const, header: "Name" },
+    { 
+      key: "name" as const, 
+      header: "Name", 
+      render: (row: Employee) => (
+        <button 
+          onClick={() => handleViewEmployee(row)}
+          className="text-primary hover:underline font-medium flex items-center gap-1"
+        >
+          {row.name}
+          <Eye className="h-3 w-3 opacity-50" />
+        </button>
+      )
+    },
     { key: "phone" as const, header: "Phone", render: (row: Employee) => row.phone || "-" },
     { key: "role" as const, header: "Role", render: (row: Employee) => roleLabels[row.role] || row.role },
     { key: "salary" as const, header: "Salary", render: (row: Employee) => row.salary ? `₹${row.salary.toLocaleString()}` : "-" },
@@ -573,6 +593,13 @@ export default function EmployeesPage() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Employee Detail Dialog */}
+      <EmployeeDetailDialog
+        employee={selectedEmployeeDetail}
+        open={employeeDetailOpen}
+        onOpenChange={setEmployeeDetailOpen}
+      />
     </div>
   );
 }
