@@ -25,10 +25,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Users, Edit, Trash2, Phone, MapPin, Loader2, Palmtree, BookOpen } from "lucide-react";
+import { Users, Edit, Trash2, Phone, MapPin, Loader2, Palmtree, BookOpen, Eye } from "lucide-react";
 import { VacationManager } from "@/components/customers/VacationManager";
 import { CustomerLedger } from "@/components/customers/CustomerLedger";
 import { CustomerAccountApprovals } from "@/components/customers/CustomerAccountApprovals";
+import { CustomerDetailDialog } from "@/components/customers/CustomerDetailDialog";
 
 interface Customer {
   id: string;
@@ -64,6 +65,7 @@ export default function CustomersPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [vacationDialogOpen, setVacationDialogOpen] = useState(false);
   const [ledgerDialogOpen, setLedgerDialogOpen] = useState(false);
+  const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState(emptyFormData);
   const [saving, setSaving] = useState(false);
@@ -185,13 +187,24 @@ export default function CustomersPage() {
   const totalDue = customers.reduce((sum, c) => sum + Number(c.credit_balance), 0);
   const totalAdvance = customers.reduce((sum, c) => sum + Number(c.advance_balance), 0);
 
+  const handleOpenDetail = (customer: Customer) => {
+    setSelectedCustomer(customer);
+    setDetailDialogOpen(true);
+  };
+
   const columns = [
     {
       key: "name",
       header: "Name",
       render: (item: Customer) => (
-        <div className="flex flex-col">
-          <span className="font-semibold">{item.name}</span>
+        <div 
+          className="flex flex-col cursor-pointer group"
+          onClick={() => handleOpenDetail(item)}
+        >
+          <span className="font-semibold flex items-center gap-1 text-primary group-hover:underline">
+            {item.name}
+            <Eye className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+          </span>
           {item.area && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               <MapPin className="h-3 w-3" /> {item.area}
@@ -204,9 +217,12 @@ export default function CustomersPage() {
       key: "phone",
       header: "Contact",
       render: (item: Customer) => (
-        <div className="flex flex-col">
+        <div 
+          className="flex flex-col cursor-pointer group"
+          onClick={() => handleOpenDetail(item)}
+        >
           {item.phone && (
-            <span className="flex items-center gap-1 text-sm">
+            <span className="flex items-center gap-1 text-sm text-primary group-hover:underline">
               <Phone className="h-3 w-3" /> {item.phone}
             </span>
           )}
@@ -569,6 +585,13 @@ export default function CustomersPage() {
         customerName={selectedCustomer?.name || ""}
         open={ledgerDialogOpen}
         onOpenChange={setLedgerDialogOpen}
+      />
+
+      {/* Customer Detail Dialog */}
+      <CustomerDetailDialog
+        customer={selectedCustomer}
+        open={detailDialogOpen}
+        onOpenChange={setDetailDialogOpen}
       />
     </div>
   );
