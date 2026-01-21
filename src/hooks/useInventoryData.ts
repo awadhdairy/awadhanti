@@ -149,25 +149,42 @@ export function useInventoryData() {
 
       // Auto-create expense entry when adding stock (purchase)
       let expenseCreated = false;
-      if (type === "add" && item.cost_per_unit && item.cost_per_unit > 0) {
-        expenseCreated = await logFeedPurchase(
-          item.name,
-          quantity,
-          item.cost_per_unit,
-          item.unit,
-          format(new Date(), "yyyy-MM-dd")
-        );
+      let expenseAmount = 0;
+      if (type === "add") {
+        if (item.cost_per_unit && item.cost_per_unit > 0) {
+          expenseAmount = quantity * item.cost_per_unit;
+          expenseCreated = await logFeedPurchase(
+            item.name,
+            quantity,
+            item.cost_per_unit,
+            item.unit,
+            format(new Date(), "yyyy-MM-dd")
+          );
+        }
       }
-      return { expenseCreated };
+      return { expenseCreated, expenseAmount, hasCost: !!(item.cost_per_unit && item.cost_per_unit > 0) };
     },
     onSuccess: (result, { type, item }) => {
       queryClient.invalidateQueries({ queryKey: ["inventory"] });
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      const message =
-        type === "add" && item.cost_per_unit && result?.expenseCreated 
-          ? "Stock updated & expense recorded" 
-          : "Stock updated";
-      toast({ title: message });
+      
+      if (type === "add") {
+        if (result?.expenseCreated) {
+          toast({ 
+            title: "Stock added & expense recorded", 
+            description: `₹${result.expenseAmount.toLocaleString()} added to expenses` 
+          });
+        } else if (result?.hasCost) {
+          toast({ title: "Stock updated", description: "Expense already exists for this item" });
+        } else {
+          toast({ 
+            title: "Stock updated", 
+            description: "No expense recorded (set unit cost to enable auto-expense)" 
+          });
+        }
+      } else {
+        toast({ title: "Stock consumed" });
+      }
     },
     onError: (error: Error) => {
       toast({ title: "Error updating stock", description: error.message, variant: "destructive" });

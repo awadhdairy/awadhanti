@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { numberToIndianWords } from "@/lib/numberToWords";
 
 interface DairySettings {
   dairy_name: string;
@@ -416,8 +417,16 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
       doc.setFontSize(12);
       doc.text(`₹${Number(invoice.final_amount).toFixed(2)}`, summaryValueX - 3, summaryY + 2, { align: "right" });
 
+      // Amount in words - displayed below the summary box
+      const amountInWords = numberToIndianWords(Number(invoice.final_amount));
+      doc.setTextColor(...darkColor);
+      doc.setFontSize(9);
+      doc.setFont("helvetica", "italic");
+      const wordsY = yPos + 60;
+      doc.text(`Amount in words: ${amountInWords}`, margin, wordsY);
+
       // Payment info box
-      yPos += 65;
+      yPos += 72;
       if (Number(invoice.paid_amount) > 0) {
         doc.setFillColor(209, 250, 229); // Green light bg
         doc.roundedRect(margin, yPos, pageWidth - margin * 2, 20, 3, 3, "F");

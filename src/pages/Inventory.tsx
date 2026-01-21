@@ -19,9 +19,11 @@ import { cn } from "@/lib/utils";
 const categoryColors: Record<string, string> = {
   green_fodder: "bg-success/10 text-success border-success/20",
   dry_fodder: "bg-warning/10 text-warning border-warning/20",
+  fodder: "bg-success/10 text-success border-success/20", // Legacy support
   concentrate: "bg-info/10 text-info border-info/20",
   supplement: "bg-primary/10 text-primary border-primary/20",
   medicine: "bg-destructive/10 text-destructive border-destructive/20",
+  byproduct: "bg-muted text-muted-foreground border-muted-foreground/20", // Legacy support
 };
 
 const emptyFormData: FeedFormData = { name: "", category: "green_fodder", unit: "kg", current_stock: "", min_stock_level: "", cost_per_unit: "", supplier: "" };
