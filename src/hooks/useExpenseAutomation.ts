@@ -1,5 +1,6 @@
 import { supabase } from "@/integrations/supabase/client";
 import { format } from "date-fns";
+import { logger } from "@/lib/logger";
 
 interface ExpenseEntry {
   category: string;
@@ -38,7 +39,7 @@ export function useExpenseAutomation() {
     if (entry.reference_id && entry.reference_type) {
       const exists = await checkExpenseExists(entry.reference_id, entry.reference_type);
       if (exists) {
-        console.log(`Expense already exists for ${entry.reference_type}:${entry.reference_id}`);
+        logger.debug("Expense", `Already exists for ${entry.reference_type}:${entry.reference_id}`);
         return false;
       }
     }
@@ -54,11 +55,11 @@ export function useExpenseAutomation() {
     });
 
     if (error) {
-      console.error("Failed to create automated expense:", error);
+      logger.error("Expense", "Failed to create automated expense", error);
       return false;
     }
 
-    console.log(`✓ Automated expense created: ${entry.title} - ₹${entry.amount}`);
+    logger.expense("Created", { item: entry.title, amount: entry.amount });
     return true;
   };
 
@@ -168,7 +169,7 @@ export function useExpenseAutomation() {
     const timestamp = Date.now();
     const reference = `feed_${itemName.replace(/\s+/g, '_')}_${timestamp}`;
 
-    console.log(`[logFeedPurchase] Creating expense: ${itemName}, total: ₹${totalCost}, ref: ${reference}`);
+    logger.expense("Creating feed purchase", { item: itemName, amount: totalCost });
 
     return await createExpense({
       category: "feed",

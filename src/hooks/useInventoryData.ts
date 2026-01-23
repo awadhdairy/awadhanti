@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useExpenseAutomation } from "@/hooks/useExpenseAutomation";
 import { format } from "date-fns";
+import { logger } from "@/lib/logger";
 
 export interface FeedItem {
   id: string;
@@ -155,7 +156,7 @@ export function useInventoryData() {
       if (type === "add" && hasCost) {
         expenseAmount = quantity * item.cost_per_unit!;
         try {
-          console.log(`[Expense Automation] Creating feed expense: ${item.name}, qty: ${quantity}, cost: ${item.cost_per_unit}`);
+          logger.expense("Creating feed expense", { item: item.name, amount: expenseAmount });
           expenseCreated = await logFeedPurchase(
             item.name,
             quantity,
@@ -163,9 +164,9 @@ export function useInventoryData() {
             item.unit,
             format(new Date(), "yyyy-MM-dd")
           );
-          console.log(`[Expense Automation] Result: ${expenseCreated ? 'Created' : 'Skipped (duplicate)'}`);
+          logger.expense("Result", { item: item.name, result: expenseCreated ? 'Created' : 'Skipped (duplicate)' });
         } catch (expenseError) {
-          console.error("[Expense Automation] Failed to create expense:", expenseError);
+          logger.error("Expense Automation", "Failed to create expense", expenseError);
           expenseCreated = false;
         }
       }

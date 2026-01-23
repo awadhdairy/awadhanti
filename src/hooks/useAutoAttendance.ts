@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
+import { logger } from '@/lib/logger';
 
 /**
  * Hook that ensures all active employees have attendance records for today.
@@ -13,7 +14,7 @@ export function useAutoAttendance() {
         await supabase.rpc('auto_create_daily_attendance');
       } catch (error) {
         // Silent fail - attendance will be created on next access
-        console.error('Auto attendance sync failed:', error);
+        logger.error('AutoAttendance', 'Sync failed', error);
       }
     };
 

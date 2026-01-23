@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { numberToIndianWords } from "@/lib/numberToWords";
+import { logger } from "@/lib/logger";
 
 interface DairySettings {
   dairy_name: string;
@@ -489,7 +490,7 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
         setPreviewOpen(true);
       }
     } catch (error) {
-      console.error("Error generating PDF:", error);
+      logger.error("InvoicePDF", "Error generating PDF", error);
     } finally {
       setGenerating(false);
     }
