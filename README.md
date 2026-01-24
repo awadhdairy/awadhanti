@@ -1,73 +1,83 @@
-# Welcome to your Lovable project
+# Awadh Dairy - Complete Dairy Farm Management Solution
 
-## Project info
+A comprehensive dairy farm management system built with React, TypeScript, and Supabase.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🚀 Features
 
-## How can I edit this code?
+- **Cattle Management**: Track cattle, breeding records, health, and lineage
+- **Milk Production**: Record daily milk yields with quality metrics
+- **Customer Management**: Subscriptions, deliveries, and billing
+- **Employee Management**: Attendance, shifts, and payroll
+- **Financial Tracking**: Invoices, payments, expenses, and ledgers
+- **Delivery Routes**: Optimize delivery with route management
+- **Customer Portal**: Self-service app for customers
 
-There are several ways of editing your application.
+## 🛠️ Tech Stack
 
-**Use Lovable**
+- **Frontend**: React 18, TypeScript, Tailwind CSS, shadcn/ui
+- **Backend**: Supabase (PostgreSQL, Auth, Edge Functions)
+- **Deployment**: Vercel (Frontend) + Supabase (Backend)
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+## 📋 Deployment Guide
 
-Changes made via Lovable will be committed automatically to this repo.
+See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for complete free-tier deployment instructions.
 
-**Use your preferred IDE**
+### Quick Start
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+```bash
+# Clone and install
+git clone <your-repo-url>
+cd awadh-dairy
+npm install
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+# Configure environment
+cp .env.example .env
+# Edit .env with your Supabase credentials
 
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Run locally
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+### Environment Variables
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+```env
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_PUBLISHABLE_KEY=your-anon-key
+VITE_SUPABASE_PROJECT_ID=your-project-id
+```
 
-**Use GitHub Codespaces**
+## 🔐 Security Features
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+- **PIN-Based Authentication**: 6-digit PIN with bcrypt hashing
+- **Role-Based Access Control**: 7 roles with granular permissions
+- **Rate Limiting**: Account lockout after 5 failed attempts
+- **Row Level Security**: All tables protected with RLS policies
+- **Separate Role Storage**: Roles stored in dedicated table (prevents privilege escalation)
 
-## What technologies are used for this project?
+## 👤 Initial Setup
 
-This project is built with:
+1. Deploy to Vercel and Supabase
+2. Navigate to `/auth`
+3. Enter admin credentials: `7897716792` / `101101`
+4. Click "Setup Admin Account"
+5. Login and create additional users
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+## 📁 Project Structure
 
-## How can I deploy this project?
+```
+src/
+├── components/     # Reusable UI components
+├── hooks/          # Custom React hooks
+├── pages/          # Route pages
+├── lib/            # Utilities
+└── integrations/   # Supabase client
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+supabase/
+├── functions/      # Edge functions
+├── migrations/     # Database migrations
+└── config.toml     # Supabase config
+```
 
-## Can I connect a custom domain to my Lovable project?
+## 📄 License
 
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+Private - All rights reserved.
