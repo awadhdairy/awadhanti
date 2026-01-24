@@ -93,7 +93,7 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
         .single();
 
       const settings: DairySettings = settingsData || {
-        dairy_name: "Doodh Wallah Dairy",
+        dairy_name: "Awadh Dairy",
         address: null,
         phone: null,
         email: null,

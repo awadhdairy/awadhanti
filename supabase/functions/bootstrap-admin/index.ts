@@ -35,7 +35,7 @@ serve(async (req) => {
       }
     )
 
-    const email = `${phone}@doodhwallah.app`
+    const email = `${phone}@awadhdairy.com`
 
     // Check if user already exists
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()

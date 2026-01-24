@@ -157,7 +157,7 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
               <Droplets className="h-5 w-5 text-sidebar-primary-foreground" />
             </div>
             <div className="flex flex-col">
-              <span className="text-sm font-bold text-sidebar-foreground">Doodh Wallah</span>
+              <span className="text-sm font-bold text-sidebar-foreground">Awadh Dairy</span>
               <span className="text-[10px] text-sidebar-foreground/60">Dairy Management</span>
             </div>
           </div>

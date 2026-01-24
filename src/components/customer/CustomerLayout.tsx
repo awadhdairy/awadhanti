@@ -36,7 +36,7 @@ export function CustomerLayout() {
         <div className="container py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-bold">Doodh Wallah</h1>
+              <h1 className="text-xl font-bold">Awadh Dairy</h1>
               {customerData && (
                 <p className="text-sm text-primary-foreground/80">
                   Hello, {customerData.name}

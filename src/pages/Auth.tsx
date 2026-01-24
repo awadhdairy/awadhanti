@@ -47,7 +47,7 @@ export default function Auth() {
   // Format phone to create a unique email-like identifier
   const phoneToEmail = (phoneNumber: string) => {
     const cleanPhone = phoneNumber.replace(/[^0-9]/g, '');
-    return `${cleanPhone}@doodhwallah.app`;
+    return `${cleanPhone}@awadhdairy.com`;
   };
 
   const handleBootstrap = async () => {
@@ -165,7 +165,7 @@ export default function Auth() {
             <Droplets className="h-10 w-10 text-sidebar-primary-foreground" />
           </div>
           <h1 className="mb-4 text-4xl font-bold text-sidebar-foreground">
-            Doodh Wallah
+            Awadh Dairy
           </h1>
           <p className="text-lg text-sidebar-foreground/80">
             Complete Dairy Management Solution

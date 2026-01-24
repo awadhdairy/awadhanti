@@ -115,7 +115,7 @@ export default function CustomerProfile() {
       <Card>
         <CardHeader><CardTitle className="text-lg">Support</CardTitle></CardHeader>
         <CardContent>
-          <div className="flex items-center gap-3 text-muted-foreground"><HelpCircle className="h-4 w-4" /><span>Contact: support@doodhwallah.app</span></div>
+          <div className="flex items-center gap-3 text-muted-foreground"><HelpCircle className="h-4 w-4" /><span>Contact: support@awadhdairy.com</span></div>
           <div className="flex items-center gap-3 text-muted-foreground mt-2"><Phone className="h-4 w-4" /><span>Call: +91 XXXXXXXXXX</span></div>
         </CardContent>
       </Card>

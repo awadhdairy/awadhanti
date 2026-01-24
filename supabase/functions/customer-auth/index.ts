@@ -57,7 +57,7 @@ serve(async (req) => {
 
         // If approved, create auth user
         if (data?.approved) {
-          const email = `customer_${phone}@doodhwallah.app`;
+          const email = `customer_${phone}@awadhdairy.com`;
           
           // Create auth user
           const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
@@ -134,7 +134,7 @@ serve(async (req) => {
         }
 
         // Get or create auth session
-        const email = `customer_${phone}@doodhwallah.app`;
+        const email = `customer_${phone}@awadhdairy.com`;
         
         // Try to sign in
         const { data: signInData, error: signInError } = await supabaseAdmin.auth.admin.generateLink({
