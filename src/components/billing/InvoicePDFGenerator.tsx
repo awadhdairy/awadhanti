@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -21,6 +21,7 @@ interface DairySettings {
   email: string | null;
   currency: string;
   invoice_prefix: string;
+  logo_url: string | null;
 }
 
 interface Customer {
@@ -41,7 +42,6 @@ interface DeliveryItem {
   unit: string;
 }
 
-// Type for Supabase delivery query result
 interface DeliveryQueryResult {
   delivery_date: string;
   delivery_items: Array<{
@@ -78,10 +78,36 @@ interface InvoicePDFGeneratorProps {
   onGenerated?: () => void;
 }
 
+// Helper to load image as base64
+const loadImageAsBase64 = (url: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx?.drawImage(img, 0, 0);
+      resolve(canvas.toDataURL("image/png"));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+};
+
 export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGeneratorProps) {
   const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [pdfDataUrl, setPdfDataUrl] = useState<string | null>(null);
+  const [logoBase64, setLogoBase64] = useState<string | null>(null);
+
+  // Preload logo
+  useEffect(() => {
+    loadImageAsBase64("/images/awadh-dairy-logo.png")
+      .then(setLogoBase64)
+      .catch(() => setLogoBase64(null));
+  }, []);
 
   const generatePDF = async (action: "download" | "preview" = "download") => {
     setGenerating(true);
@@ -96,11 +122,12 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
 
       const settings: DairySettings = settingsData || {
         dairy_name: "Awadh Dairy",
-        address: "Fresh Quality Dairy Products",
-        phone: "+91 9876543210",
+        address: "Lucknow, Uttar Pradesh, India",
+        phone: "+91 78977 16792",
         email: "contact@awadhdairy.com",
         currency: "INR",
         invoice_prefix: "INV",
+        logo_url: null,
       };
 
       // Fetch customer details
@@ -136,7 +163,7 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
         .lte("delivery_date", invoice.billing_period_end)
         .eq("status", "delivered");
 
-      // Flatten delivery items with proper typing
+      // Flatten delivery items
       const items: DeliveryItem[] = [];
       const typedDeliveries = (deliveries || []) as DeliveryQueryResult[];
       typedDeliveries.forEach((delivery) => {
@@ -163,183 +190,207 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
       const pageHeight = doc.internal.pageSize.getHeight();
       const margin = 15;
 
-      // Colors - Professional theme
-      const primaryColor: [number, number, number] = [45, 90, 39]; // Dark green
-      const secondaryColor: [number, number, number] = [76, 175, 80]; // Light green
-      const accentColor: [number, number, number] = [255, 193, 7]; // Amber
-      const darkColor: [number, number, number] = [33, 33, 33]; // Near black
-      const lightBg: [number, number, number] = [245, 245, 245]; // Light gray
-      const whiteBg: [number, number, number] = [255, 255, 255];
+      // Modern color palette
+      const primaryColor: [number, number, number] = [45, 80, 22]; // Deep forest green
+      const accentColor: [number, number, number] = [139, 90, 43]; // Warm brown (matches logo)
+      const goldColor: [number, number, number] = [180, 150, 80]; // Gold accent
+      const darkText: [number, number, number] = [30, 30, 30];
+      const grayText: [number, number, number] = [100, 100, 100];
+      const lightBg: [number, number, number] = [248, 248, 248];
+      const borderColor: [number, number, number] = [220, 220, 220];
 
-      // Header background
+      // === WATERMARK - Draw first (behind everything) ===
+      if (logoBase64) {
+        const watermarkSize = 120;
+        const watermarkX = (pageWidth - watermarkSize) / 2;
+        const watermarkY = (pageHeight - watermarkSize) / 2;
+        
+        // Add logo as faded watermark
+        doc.saveGraphicsState();
+        doc.setGState(doc.GState({ opacity: 0.06 }));
+        doc.addImage(logoBase64, "PNG", watermarkX, watermarkY, watermarkSize, watermarkSize);
+        doc.restoreGraphicsState();
+      }
+
+      // === HEADER SECTION ===
+      let yPos = margin;
+
+      // Top decorative border
+      doc.setFillColor(...accentColor);
+      doc.rect(0, 0, pageWidth, 5, "F");
+
+      // Logo and Company Info
+      if (logoBase64) {
+        doc.addImage(logoBase64, "PNG", margin, yPos + 3, 35, 35);
+      }
+
+      // Company details - right of logo
+      const companyX = logoBase64 ? margin + 42 : margin;
+      
+      doc.setTextColor(...primaryColor);
+      doc.setFontSize(24);
+      doc.setFont("helvetica", "bold");
+      doc.text(settings.dairy_name.toUpperCase(), companyX, yPos + 14);
+      
+      doc.setFontSize(10);
+      doc.setTextColor(...grayText);
+      doc.setFont("helvetica", "normal");
+      doc.text("Premium Quality Fresh Dairy Products", companyX, yPos + 22);
+      
+      doc.setFontSize(8);
+      const addressLine = settings.address || "Lucknow, Uttar Pradesh, India";
+      doc.text(addressLine, companyX, yPos + 29);
+      
+      const contactLine = `Phone: ${settings.phone || "+91 78977 16792"} | Email: contact@awadhdairy.com`;
+      doc.text(contactLine, companyX, yPos + 35);
+
+      // INVOICE badge - Right side
+      const badgeWidth = 55;
+      const badgeX = pageWidth - margin - badgeWidth;
+      
       doc.setFillColor(...primaryColor);
-      doc.rect(0, 0, pageWidth, 50, "F");
+      doc.roundedRect(badgeX, yPos + 5, badgeWidth, 32, 2, 2, "F");
       
-      // Accent stripe
-      doc.setFillColor(...secondaryColor);
-      doc.rect(0, 50, pageWidth, 4, "F");
-
-      // Company name - Large and prominent
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(28);
+      doc.setFontSize(14);
       doc.setFont("helvetica", "bold");
-      doc.text(settings.dairy_name, margin, 22);
-
-      // Tagline
-      doc.setFontSize(10);
-      doc.setFont("helvetica", "normal");
-      doc.text("Premium Quality Fresh Dairy Products", margin, 32);
-
-      // Contact info line
-      doc.setFontSize(8);
-      const contactInfo: string[] = [];
-      if (settings.phone) contactInfo.push(`📞 ${settings.phone}`);
-      contactInfo.push("📧 contact@awadhdairy.com");
-      contactInfo.push("🌐 www.awadhdairy.com");
-      if (settings.address) contactInfo.push(`📍 ${settings.address}`);
-      doc.text(contactInfo.join("  |  "), margin, 42);
-
-      // Invoice badge - Right side
-      doc.setFillColor(...whiteBg);
-      doc.roundedRect(pageWidth - margin - 60, 10, 60, 34, 3, 3, "F");
+      doc.text("TAX INVOICE", badgeX + badgeWidth / 2, yPos + 16, { align: "center" });
       
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(16);
-      doc.setFont("helvetica", "bold");
-      doc.text("TAX INVOICE", pageWidth - margin - 30, 22, { align: "center" });
-      
-      doc.setTextColor(...darkColor);
       doc.setFontSize(11);
-      doc.setFont("helvetica", "bold");
-      doc.text(invoice.invoice_number, pageWidth - margin - 30, 32, { align: "center" });
+      doc.text(invoice.invoice_number, badgeX + badgeWidth / 2, yPos + 25, { align: "center" });
       
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
-      doc.text(format(new Date(invoice.created_at), "dd MMM yyyy"), pageWidth - margin - 30, 40, { align: "center" });
+      doc.text(format(new Date(invoice.created_at), "dd MMM yyyy"), badgeX + badgeWidth / 2, yPos + 32, { align: "center" });
 
-      // Main content starts
-      let yPos = 65;
+      yPos += 48;
 
-      // Two-column layout for Bill To and Invoice Details
-      const colWidth = (pageWidth - margin * 2 - 15) / 2;
-
-      // Left Column - BILL TO
-      doc.setFillColor(...lightBg);
-      doc.roundedRect(margin, yPos, colWidth, 48, 3, 3, "F");
+      // Separator line with gold accent
+      doc.setDrawColor(...goldColor);
+      doc.setLineWidth(1);
+      doc.line(margin, yPos, pageWidth - margin, yPos);
       
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(10);
+      yPos += 10;
+
+      // === BILLING INFORMATION - Two Column Layout ===
+      const colWidth = (pageWidth - margin * 2 - 20) / 2;
+
+      // Bill To Box
+      doc.setFillColor(...lightBg);
+      doc.setDrawColor(...borderColor);
+      doc.setLineWidth(0.3);
+      doc.roundedRect(margin, yPos, colWidth, 45, 2, 2, "FD");
+      
+      doc.setTextColor(...accentColor);
+      doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.text("BILL TO", margin + 8, yPos + 10);
       
-      doc.setDrawColor(...secondaryColor);
+      doc.setDrawColor(...goldColor);
       doc.setLineWidth(0.5);
-      doc.line(margin + 8, yPos + 13, margin + 40, yPos + 13);
+      doc.line(margin + 8, yPos + 12, margin + 35, yPos + 12);
       
-      doc.setTextColor(...darkColor);
+      doc.setTextColor(...darkText);
       doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
       doc.text(customer.name, margin + 8, yPos + 22);
       
       doc.setFont("helvetica", "normal");
       doc.setFontSize(9);
-      let customerY = yPos + 28;
+      doc.setTextColor(...grayText);
+      let customerInfoY = yPos + 28;
+      
       if (customer.address) {
-        doc.text(customer.address, margin + 8, customerY);
-        customerY += 5;
+        const addressLines = doc.splitTextToSize(customer.address, colWidth - 16);
+        doc.text(addressLines, margin + 8, customerInfoY);
+        customerInfoY += addressLines.length * 4;
       }
       if (customer.area) {
-        doc.text(`Area: ${customer.area}`, margin + 8, customerY);
-        customerY += 5;
+        doc.text(`Area: ${customer.area}`, margin + 8, customerInfoY);
+        customerInfoY += 4;
       }
       if (customer.phone) {
-        doc.text(`Phone: ${customer.phone}`, margin + 8, customerY);
-        customerY += 5;
-      }
-      if (customer.email) {
-        doc.text(`Email: ${customer.email}`, margin + 8, customerY);
+        doc.text(`Ph: ${customer.phone}`, margin + 8, customerInfoY);
       }
 
-      // Right Column - INVOICE DETAILS
-      const rightColX = margin + colWidth + 15;
+      // Invoice Details Box
+      const rightColX = margin + colWidth + 20;
       doc.setFillColor(...lightBg);
-      doc.roundedRect(rightColX, yPos, colWidth, 48, 3, 3, "F");
-
-      doc.setTextColor(...primaryColor);
-      doc.setFontSize(10);
+      doc.setDrawColor(...borderColor);
+      doc.roundedRect(rightColX, yPos, colWidth, 45, 2, 2, "FD");
+      
+      doc.setTextColor(...accentColor);
+      doc.setFontSize(9);
       doc.setFont("helvetica", "bold");
       doc.text("INVOICE DETAILS", rightColX + 8, yPos + 10);
       
-      doc.setDrawColor(...secondaryColor);
-      doc.line(rightColX + 8, yPos + 13, rightColX + 55, yPos + 13);
+      doc.setDrawColor(...goldColor);
+      doc.line(rightColX + 8, yPos + 12, rightColX + 50, yPos + 12);
 
-      doc.setTextColor(...darkColor);
+      // Invoice detail rows
       doc.setFontSize(9);
+      const detailLabelX = rightColX + 8;
+      const detailValueX = rightColX + colWidth - 8;
+      let detailY = yPos + 20;
+
+      const addDetailRow = (label: string, value: string) => {
+        doc.setTextColor(...grayText);
+        doc.setFont("helvetica", "normal");
+        doc.text(label, detailLabelX, detailY);
+        doc.setTextColor(...darkText);
+        doc.setFont("helvetica", "bold");
+        doc.text(value, detailValueX, detailY, { align: "right" });
+        detailY += 6;
+      };
+
+      addDetailRow("Invoice Date:", format(new Date(invoice.created_at), "dd MMMM yyyy"));
+      addDetailRow("Billing Period:", `${format(new Date(invoice.billing_period_start), "dd MMM")} - ${format(new Date(invoice.billing_period_end), "dd MMM yyyy")}`);
+      addDetailRow("Due Date:", invoice.due_date ? format(new Date(invoice.due_date), "dd MMM yyyy") : "On Receipt");
+
+      // Payment Status Badge
+      detailY += 2;
+      const statusText = invoice.payment_status.charAt(0).toUpperCase() + invoice.payment_status.slice(1);
+      let statusBg: [number, number, number];
+      let statusTextColor: [number, number, number] = [255, 255, 255];
       
-      const labelX = rightColX + 8;
-      const valueX = rightColX + colWidth - 8;
-      let detailY = yPos + 22;
-
-      doc.setFont("helvetica", "bold");
-      doc.text("Invoice Date:", labelX, detailY);
-      doc.setFont("helvetica", "normal");
-      doc.text(format(new Date(invoice.created_at), "dd MMMM yyyy"), valueX, detailY, { align: "right" });
-
-      detailY += 7;
-      doc.setFont("helvetica", "bold");
-      doc.text("Billing Period:", labelX, detailY);
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        `${format(new Date(invoice.billing_period_start), "dd MMM")} - ${format(new Date(invoice.billing_period_end), "dd MMM yyyy")}`,
-        valueX, detailY, { align: "right" }
-      );
-
-      detailY += 7;
-      doc.setFont("helvetica", "bold");
-      doc.text("Due Date:", labelX, detailY);
-      doc.setFont("helvetica", "normal");
-      doc.text(
-        invoice.due_date ? format(new Date(invoice.due_date), "dd MMMM yyyy") : "On Receipt",
-        valueX, detailY, { align: "right" }
-      );
-
-      // Status badge
-      detailY += 10;
-      const statusText = invoice.payment_status.toUpperCase();
-      let statusColor: [number, number, number];
       switch (invoice.payment_status) {
         case "paid":
-          statusColor = [16, 185, 129];
+          statusBg = [34, 139, 34]; // Forest green
           break;
         case "partial":
-          statusColor = [245, 158, 11];
+          statusBg = [230, 160, 40]; // Amber
           break;
         case "overdue":
-          statusColor = [239, 68, 68];
+          statusBg = [200, 50, 50]; // Red
           break;
         default:
-          statusColor = [100, 116, 139];
+          statusBg = [100, 100, 100]; // Gray
       }
       
-      doc.setFillColor(...statusColor);
-      doc.roundedRect(labelX, detailY - 5, 40, 10, 2, 2, "F");
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(9);
+      doc.setFillColor(...statusBg);
+      const statusWidth = doc.getTextWidth(statusText) + 12;
+      doc.roundedRect(detailLabelX, detailY - 4, statusWidth, 8, 1.5, 1.5, "F");
+      doc.setTextColor(...statusTextColor);
+      doc.setFontSize(8);
       doc.setFont("helvetica", "bold");
-      doc.text(statusText, labelX + 20, detailY + 1, { align: "center" });
+      doc.text(statusText, detailLabelX + statusWidth / 2, detailY + 1, { align: "center" });
 
-      yPos += 58;
+      yPos += 55;
 
-      // Items table with Rate and Quantity columns
+      // === ITEMS TABLE ===
+      interface GroupedItem {
+        product_name: string;
+        unit: string;
+        quantity: number;
+        unit_price: number;
+        total_amount: number;
+      }
+
+      let tableData: string[][] = [];
+
       if (items.length > 0) {
-        // Group items by product and calculate totals
-        const groupedItems = items.reduce((acc: Record<string, {
-          product_name: string;
-          unit: string;
-          quantity: number;
-          unit_price: number;
-          total_amount: number;
-        }>, item) => {
+        // Group items by product and rate
+        const groupedItems = items.reduce((acc: Record<string, GroupedItem>, item) => {
           const key = `${item.product_name}_${item.unit_price}`;
           if (!acc[key]) {
             acc[key] = {
@@ -355,234 +406,240 @@ export function InvoicePDFGenerator({ invoice, onGenerated }: InvoicePDFGenerato
           return acc;
         }, {});
 
-        const tableData = Object.values(groupedItems).map((item, index) => [
-          (index + 1).toString(),
+        tableData = Object.values(groupedItems).map((item, index) => [
+          String(index + 1),
           item.product_name,
           item.quantity.toFixed(2),
           item.unit,
           `₹${item.unit_price.toFixed(2)}`,
           `₹${item.total_amount.toFixed(2)}`,
         ]);
+      } else if (invoice.notes) {
+        // Parse from notes
+        const noteLines = invoice.notes.split("; ").filter(line => line.trim());
+        tableData = noteLines.map((line, index) => {
+          const match = line.match(/(.+?):\s*([\d.]+)\s*(\w+)\s*@\s*₹([\d.]+)/);
+          if (match) {
+            const [, product, qty, unit, rate] = match;
+            const amount = parseFloat(qty) * parseFloat(rate);
+            return [
+              String(index + 1),
+              product.trim(),
+              parseFloat(qty).toFixed(2),
+              unit,
+              `₹${parseFloat(rate).toFixed(2)}`,
+              `₹${amount.toFixed(2)}`,
+            ];
+          }
+          return [String(index + 1), line.trim(), "-", "-", "-", "-"];
+        });
+      }
 
+      if (tableData.length > 0) {
         autoTable(doc, {
           startY: yPos,
-          head: [["S.No", "Description", "Qty", "Unit", "Rate", "Amount"]],
+          head: [["#", "Product Description", "Qty", "Unit", "Rate (₹)", "Amount (₹)"]],
           body: tableData,
           margin: { left: margin, right: margin },
           headStyles: {
             fillColor: primaryColor,
             textColor: [255, 255, 255],
             fontStyle: "bold",
-            fontSize: 10,
-            cellPadding: 5,
+            fontSize: 9,
+            cellPadding: 4,
             halign: "center",
           },
           bodyStyles: {
-            textColor: darkColor,
+            textColor: darkText,
             fontSize: 9,
             cellPadding: 4,
           },
           alternateRowStyles: {
-            fillColor: [250, 250, 250],
+            fillColor: [252, 252, 252],
           },
           columnStyles: {
-            0: { cellWidth: 15, halign: "center" },
+            0: { cellWidth: 12, halign: "center" },
             1: { cellWidth: "auto", halign: "left" },
-            2: { cellWidth: 22, halign: "right" },
-            3: { cellWidth: 20, halign: "center" },
-            4: { cellWidth: 30, halign: "right" },
+            2: { cellWidth: 20, halign: "right" },
+            3: { cellWidth: 18, halign: "center" },
+            4: { cellWidth: 28, halign: "right" },
             5: { cellWidth: 32, halign: "right", fontStyle: "bold" },
           },
           styles: {
-            lineColor: [200, 200, 200],
-            lineWidth: 0.1,
+            lineColor: borderColor,
+            lineWidth: 0.2,
           },
+          tableLineColor: borderColor,
+          tableLineWidth: 0.2,
         });
 
-        yPos = (doc as any).lastAutoTable.finalY + 8;
+        yPos = (doc as any).lastAutoTable.finalY + 10;
       } else {
-        // If no delivery items, show invoice notes if available
-        doc.setTextColor(...darkColor);
+        // No items - show message
+        doc.setTextColor(...grayText);
         doc.setFontSize(10);
-        doc.setFont("helvetica", "bold");
-        doc.text("Billing Summary", margin, yPos + 5);
-        
-        yPos += 10;
-        
-        if (invoice.notes) {
-          // Parse the notes which contain item details
-          const noteLines = invoice.notes.split("; ");
-          const tableData = noteLines.map((line, index) => {
-            // Parse format: "Product: quantity unit @ ₹rate/unit"
-            const match = line.match(/(.+?):\s*([\d.]+)\s*(\w+)\s*@\s*₹([\d.]+)/);
-            if (match) {
-              const [, product, qty, unit, rate] = match;
-              const amount = parseFloat(qty) * parseFloat(rate);
-              return [
-                (index + 1).toString(),
-                product.trim(),
-                parseFloat(qty).toFixed(2),
-                unit,
-                `₹${parseFloat(rate).toFixed(2)}`,
-                `₹${amount.toFixed(2)}`,
-              ];
-            }
-            return [(index + 1).toString(), line, "-", "-", "-", "-"];
-          });
-
-          if (tableData.length > 0) {
-            autoTable(doc, {
-              startY: yPos,
-              head: [["S.No", "Description", "Qty", "Unit", "Rate", "Amount"]],
-              body: tableData,
-              margin: { left: margin, right: margin },
-              headStyles: {
-                fillColor: primaryColor,
-                textColor: [255, 255, 255],
-                fontStyle: "bold",
-                fontSize: 10,
-                cellPadding: 5,
-                halign: "center",
-              },
-              bodyStyles: {
-                textColor: darkColor,
-                fontSize: 9,
-                cellPadding: 4,
-              },
-              alternateRowStyles: {
-                fillColor: [250, 250, 250],
-              },
-              columnStyles: {
-                0: { cellWidth: 15, halign: "center" },
-                1: { cellWidth: "auto", halign: "left" },
-                2: { cellWidth: 22, halign: "right" },
-                3: { cellWidth: 20, halign: "center" },
-                4: { cellWidth: 30, halign: "right" },
-                5: { cellWidth: 32, halign: "right", fontStyle: "bold" },
-              },
-            });
-            yPos = (doc as any).lastAutoTable.finalY + 8;
-          }
-        } else {
-          // Fallback - simple total display
-          doc.setFont("helvetica", "normal");
-          doc.setFontSize(9);
-          doc.text(`Invoice for billing period: ${format(new Date(invoice.billing_period_start), "dd MMM")} - ${format(new Date(invoice.billing_period_end), "dd MMM yyyy")}`, margin, yPos + 5);
-          yPos += 15;
-        }
+        doc.text("No delivery items found for this billing period.", margin, yPos + 10);
+        yPos += 25;
       }
 
-      // Summary section - Right aligned
-      const summaryWidth = 90;
+      // === SUMMARY SECTION ===
+      const summaryWidth = 95;
       const summaryX = pageWidth - margin - summaryWidth;
-
+      const summaryHeight = Number(invoice.discount_amount) > 0 ? 65 : 58;
+      
       doc.setFillColor(...lightBg);
-      doc.roundedRect(summaryX, yPos, summaryWidth, 62, 3, 3, "F");
+      doc.setDrawColor(...borderColor);
+      doc.roundedRect(summaryX, yPos, summaryWidth, summaryHeight, 2, 2, "FD");
 
+      let sumY = yPos + 10;
       const sumLabelX = summaryX + 8;
       const sumValueX = summaryX + summaryWidth - 8;
-      let sumY = yPos + 12;
 
       doc.setFontSize(9);
-      doc.setTextColor(...darkColor);
-      
+
+      // Subtotal
+      doc.setTextColor(...grayText);
       doc.setFont("helvetica", "normal");
       doc.text("Subtotal:", sumLabelX, sumY);
+      doc.setTextColor(...darkText);
       doc.text(`₹${Number(invoice.total_amount).toFixed(2)}`, sumValueX, sumY, { align: "right" });
-      
+
+      // Tax
       sumY += 8;
+      doc.setTextColor(...grayText);
       doc.text("Tax:", sumLabelX, sumY);
-      doc.text(`₹${Number(invoice.tax_amount).toFixed(2)}`, sumValueX, sumY, { align: "right" });
-      
-      sumY += 8;
+      doc.setTextColor(...darkText);
+      doc.text(`₹${Number(invoice.tax_amount || 0).toFixed(2)}`, sumValueX, sumY, { align: "right" });
+
+      // Discount (if any)
       if (Number(invoice.discount_amount) > 0) {
-        doc.setTextColor(...secondaryColor);
+        sumY += 8;
+        doc.setTextColor(34, 139, 34);
         doc.text("Discount:", sumLabelX, sumY);
         doc.text(`-₹${Number(invoice.discount_amount).toFixed(2)}`, sumValueX, sumY, { align: "right" });
-        sumY += 8;
       }
 
-      // Divider line
-      doc.setDrawColor(...primaryColor);
-      doc.setLineWidth(0.5);
+      // Divider
+      sumY += 6;
+      doc.setDrawColor(...goldColor);
+      doc.setLineWidth(0.8);
       doc.line(sumLabelX, sumY, sumValueX, sumY);
 
-      // Grand Total box
-      sumY += 6;
+      // Grand Total
+      sumY += 8;
       doc.setFillColor(...primaryColor);
-      doc.roundedRect(sumLabelX - 4, sumY - 3, summaryWidth - 8, 16, 2, 2, "F");
+      doc.roundedRect(sumLabelX - 4, sumY - 4, summaryWidth - 8, 14, 2, 2, "F");
       
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(10);
       doc.setFont("helvetica", "bold");
-      doc.text("GRAND TOTAL", sumLabelX + 2, sumY + 7);
+      doc.text("GRAND TOTAL", sumLabelX + 2, sumY + 4);
       doc.setFontSize(12);
-      doc.text(`₹${Number(invoice.final_amount).toFixed(2)}`, sumValueX - 4, sumY + 7, { align: "right" });
+      doc.text(`₹${Number(invoice.final_amount).toFixed(2)}`, sumValueX - 4, sumY + 4, { align: "right" });
 
-      // Amount in words
-      const wordsY = yPos + 70;
-      const amountInWords = numberToIndianWords(Number(invoice.final_amount));
-      doc.setTextColor(...darkColor);
+      // Amount in words - Below summary, left aligned
+      const wordsY = yPos + summaryHeight + 8;
+      doc.setTextColor(...accentColor);
       doc.setFontSize(9);
+      doc.setFont("helvetica", "bold");
+      doc.text("Amount in Words:", margin, wordsY);
+      
+      doc.setTextColor(...darkText);
       doc.setFont("helvetica", "italic");
-      doc.text(`Amount in words: ${amountInWords}`, margin, wordsY);
+      const amountWords = numberToIndianWords(Number(invoice.final_amount));
+      const wordsLines = doc.splitTextToSize(amountWords, pageWidth - margin * 2);
+      doc.text(wordsLines, margin, wordsY + 5);
 
-      yPos = wordsY + 10;
+      yPos = wordsY + 5 + wordsLines.length * 4 + 8;
 
-      // Payment status box (if partially paid)
+      // === PAYMENT RECEIVED SECTION (if applicable) ===
       if (Number(invoice.paid_amount) > 0) {
-        doc.setFillColor(220, 252, 231); // Green tint
-        doc.roundedRect(margin, yPos, pageWidth - margin * 2, 22, 3, 3, "F");
+        const balance = Number(invoice.final_amount) - Number(invoice.paid_amount);
         
-        doc.setTextColor(22, 163, 74);
+        doc.setFillColor(230, 245, 230);
+        doc.setDrawColor(34, 139, 34);
+        doc.setLineWidth(0.3);
+        doc.roundedRect(margin, yPos, pageWidth - margin * 2, 18, 2, 2, "FD");
+        
+        doc.setTextColor(34, 139, 34);
         doc.setFontSize(10);
         doc.setFont("helvetica", "bold");
-        doc.text("PAYMENT RECEIVED", margin + 10, yPos + 10);
-        doc.text(`₹${Number(invoice.paid_amount).toFixed(2)}`, margin + 80, yPos + 10);
+        doc.text(`✓ Payment Received: ₹${Number(invoice.paid_amount).toFixed(2)}`, margin + 10, yPos + 11);
         
-        const balance = Number(invoice.final_amount) - Number(invoice.paid_amount);
         if (balance > 0) {
-          doc.setTextColor(220, 38, 38);
-          doc.text(`Balance Due: ₹${balance.toFixed(2)}`, pageWidth - margin - 10, yPos + 10, { align: "right" });
+          doc.setTextColor(200, 50, 50);
+          doc.text(`Balance Due: ₹${balance.toFixed(2)}`, pageWidth - margin - 10, yPos + 11, { align: "right" });
+        } else {
+          doc.setTextColor(34, 139, 34);
+          doc.text("FULLY PAID", pageWidth - margin - 10, yPos + 11, { align: "right" });
         }
         
-        yPos += 28;
+        yPos += 25;
       }
 
-      // Footer section
-      const footerY = pageHeight - 35;
+      // === TERMS AND BANK DETAILS ===
+      if (yPos < pageHeight - 65) {
+        doc.setDrawColor(...borderColor);
+        doc.setLineWidth(0.3);
+        doc.line(margin, yPos, pageWidth - margin, yPos);
+        
+        yPos += 8;
+        
+        doc.setTextColor(...accentColor);
+        doc.setFontSize(9);
+        doc.setFont("helvetica", "bold");
+        doc.text("TERMS & CONDITIONS", margin, yPos);
+        
+        doc.setTextColor(...grayText);
+        doc.setFontSize(8);
+        doc.setFont("helvetica", "normal");
+        yPos += 5;
+        doc.text("• Payment is due within 15 days from the invoice date.", margin, yPos);
+        yPos += 4;
+        doc.text("• Please quote invoice number for all payments.", margin, yPos);
+        yPos += 4;
+        doc.text("• Subject to Lucknow jurisdiction.", margin, yPos);
+      }
+
+      // === FOOTER ===
+      const footerY = pageHeight - 25;
       
-      // Decorative footer line
-      doc.setFillColor(...secondaryColor);
-      doc.rect(0, footerY - 8, pageWidth, 3, "F");
+      // Decorative footer
+      doc.setFillColor(...accentColor);
+      doc.rect(0, footerY - 5, pageWidth, 2, "F");
 
       // Thank you message
       doc.setTextColor(...primaryColor);
-      doc.setFontSize(14);
+      doc.setFontSize(12);
       doc.setFont("helvetica", "bold");
-      doc.text("Thank you for choosing Awadh Dairy!", pageWidth / 2, footerY + 2, { align: "center" });
+      doc.text("Thank You for Your Business!", pageWidth / 2, footerY + 5, { align: "center" });
 
-      // Footer info
-      doc.setTextColor(...darkColor);
+      // Contact and website
+      doc.setTextColor(...grayText);
       doc.setFontSize(8);
       doc.setFont("helvetica", "normal");
       doc.text(
-        "For queries: contact@awadhdairy.com | Payment due within 15 days | Fresh Quality Guaranteed",
+        "www.awadhdairy.com | contact@awadhdairy.com | +91 78977 16792",
         pageWidth / 2,
-        footerY + 10,
+        footerY + 12,
         { align: "center" }
       );
 
       // Generated timestamp
       doc.setFontSize(7);
-      doc.setTextColor(150, 150, 150);
+      doc.setTextColor(180, 180, 180);
       doc.text(
-        `Generated on ${format(new Date(), "dd MMM yyyy 'at' HH:mm")} | www.awadhdairy.com`,
+        `This is a computer generated invoice | Generated on ${format(new Date(), "dd MMM yyyy 'at' HH:mm")}`,
         pageWidth / 2,
-        footerY + 17,
+        footerY + 18,
         { align: "center" }
       );
 
+      // Bottom border
+      doc.setFillColor(...primaryColor);
+      doc.rect(0, pageHeight - 4, pageWidth, 4, "F");
+
+      // Output
       if (action === "download") {
         doc.save(`Invoice_${invoice.invoice_number}_${customer.name.replace(/\s+/g, "_")}.pdf`);
         onGenerated?.();
