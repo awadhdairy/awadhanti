@@ -98,7 +98,7 @@ serve(async (req) => {
     }
 
     // Create the auth user - MUST match domain used in Auth.tsx login
-    const email = `${phone}@doodhwallah.app`
+    const email = `${phone}@awadhdairy.com`
     const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: pin,

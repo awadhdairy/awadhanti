@@ -1,4 +1,4 @@
-# Doodh Wallah - Dairy Management System
+# Awadh Dairy - Dairy Management System
 # robots.txt
 
 User-agent: Googlebot
@@ -23,4 +23,4 @@ Disallow: /dashboard
 Disallow: /auth
 
 # Sitemap
-Sitemap: https://doodhwallah.app/sitemap.xml
+Sitemap: https://awadhdairy.com/sitemap.xml

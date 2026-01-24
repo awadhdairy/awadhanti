@@ -139,7 +139,7 @@ export default function CustomerAuth() {
           <Milk className="h-8 w-8 text-primary-foreground" />
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Doodh Wallah</h1>
+          <h1 className="text-2xl font-bold text-foreground">Awadh Dairy</h1>
           <p className="text-sm text-muted-foreground">Customer Portal</p>
         </div>
       </div>

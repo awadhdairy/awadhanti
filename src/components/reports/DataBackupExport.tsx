@@ -358,7 +358,7 @@ export function DataBackupExport() {
     // Add metadata sheet
     const dateRange = getDateRange(period);
     const metadataSheet = XLSX.utils.aoa_to_sheet([
-      ["Doodh Wallah - Data Backup"],
+      ["Awadh Dairy - Data Backup"],
       [""],
       ["Export Date", format(new Date(), "dd MMM yyyy HH:mm")],
       ["Period", period.charAt(0).toUpperCase() + period.slice(1)],
@@ -398,7 +398,7 @@ export function DataBackupExport() {
     // Title page
     doc.setFontSize(24);
     doc.setFont("helvetica", "bold");
-    doc.text("Doodh Wallah", 148.5, currentY, { align: "center" });
+    doc.text("Awadh Dairy", 148.5, currentY, { align: "center" });
     currentY += 10;
     
     doc.setFontSize(18);
