@@ -73,6 +73,31 @@ export default function SettingsPage() {
     setLoading(false);
   };
 
+  const handleCreateDefaultSettings = async () => {
+    setSaving(true);
+    const { data, error } = await supabase
+      .from("dairy_settings")
+      .insert({ dairy_name: "Awadh Dairy" })
+      .select()
+      .single();
+
+    setSaving(false);
+
+    if (error) {
+      toast({
+        title: "Error creating settings",
+        description: error.message,
+        variant: "destructive",
+      });
+    } else if (data) {
+      setDairySettings(data);
+      toast({
+        title: "Settings created",
+        description: "Default dairy settings have been created",
+      });
+    }
+  };
+
   const handleSaveDairySettings = async () => {
     if (!dairySettings) return;
 
@@ -236,7 +261,7 @@ export default function SettingsPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {dairySettings && (
+              {dairySettings ? (
                 <>
                   <div className="grid gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
@@ -310,6 +335,18 @@ export default function SettingsPage() {
                     Save Changes
                   </Button>
                 </>
+              ) : (
+                <div className="flex flex-col items-center justify-center py-8 text-center">
+                  <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+                  <h3 className="text-lg font-medium">No Dairy Settings Found</h3>
+                  <p className="text-muted-foreground max-w-sm mb-4">
+                    Click below to create default settings for your dairy
+                  </p>
+                  <Button onClick={handleCreateDefaultSettings} disabled={saving}>
+                    {saving ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+                    Create Default Settings
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
