@@ -66,11 +66,13 @@ export default function UserManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [resetPinDialogOpen, setResetPinDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [cleanupDialogOpen, setCleanupDialogOpen] = useState(false);
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [newPin, setNewPin] = useState("");
   const [creating, setCreating] = useState(false);
   const [resettingPin, setResettingPin] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [cleaningUp, setCleaningUp] = useState(false);
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
 
   // Form state
@@ -272,6 +274,41 @@ export default function UserManagement() {
     }
   };
 
+  const handleCleanupOrphaned = async () => {
+    setCleaningUp(true);
+    try {
+      // These are the known orphaned auth user IDs from the database investigation
+      const orphanedUserIds = [
+        "ebf9354e-d35e-4758-b92d-65e7d9708997",
+        "11801600-2589-4ff5-bcd3-04c1a1942c04",
+        "262befb9-c895-4db2-bf96-48e9e44ad10e",
+        "0bea4173-707c-4772-9d20-d58ac60ebc30"
+      ];
+
+      const response = await supabase.functions.invoke("delete-user", {
+        body: { 
+          action: "cleanup-orphaned",
+          userIds: orphanedUserIds 
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to cleanup");
+      }
+
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success(response.data.message);
+      setCleanupDialogOpen(false);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to cleanup orphaned users");
+    } finally {
+      setCleaningUp(false);
+    }
+  };
+
   const columns = [
     {
       key: "full_name",
@@ -363,7 +400,15 @@ export default function UserManagement() {
         icon={Users}
       />
 
-      <div className="flex justify-end">
+      <div className="flex justify-end gap-2">
+        <Button 
+          variant="outline" 
+          className="gap-2"
+          onClick={() => setCleanupDialogOpen(true)}
+        >
+          <Trash2 className="h-4 w-4" />
+          Cleanup Orphaned Users
+        </Button>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button className="gap-2">
@@ -529,6 +574,17 @@ export default function UserManagement() {
         description={`Are you sure you want to permanently delete "${selectedUser?.full_name}"? This action cannot be undone and will remove all associated data including their profile and login access.`}
         confirmText={deleting ? "Deleting..." : "Delete Permanently"}
         onConfirm={handleDeleteUser}
+        variant="destructive"
+      />
+
+      {/* Cleanup Orphaned Users Dialog */}
+      <ConfirmDialog
+        open={cleanupDialogOpen}
+        onOpenChange={setCleanupDialogOpen}
+        title="Cleanup Orphaned Users"
+        description="This will delete 4 orphaned authentication records that have no associated profiles. These are blocking phone numbers from being reused. This action cannot be undone."
+        confirmText={cleaningUp ? "Cleaning up..." : "Cleanup Now"}
+        onConfirm={handleCleanupOrphaned}
         variant="destructive"
       />
     </div>

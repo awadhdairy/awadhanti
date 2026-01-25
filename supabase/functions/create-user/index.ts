@@ -111,6 +111,8 @@ serve(async (req) => {
       )
     }
 
+    console.log(`Creating auth user for phone: ${phone}, email: ${email}`)
+
     const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: pin,
@@ -122,8 +124,7 @@ serve(async (req) => {
     })
 
     if (createError) {
-      console.error('Error creating user:', createError)
-      // Provide user-friendly error messages
+      console.error('Error creating auth user:', createError)
       let errorMessage = 'Failed to create user'
       if (createError.message?.includes('already been registered')) {
         errorMessage = 'A user with this phone number already exists. Please use a different phone number.'
@@ -137,26 +138,29 @@ serve(async (req) => {
     }
 
     const userId = authData.user.id
-    console.log('Created user with ID:', userId)
+    console.log('Created auth user with ID:', userId)
 
-    // Wait a moment for the trigger to create the profile
-    await new Promise(resolve => setTimeout(resolve, 500))
-
-    // Update the profile with correct details (trigger creates base profile)
-    const { error: profileUpdateError } = await supabaseAdmin
+    // DIRECTLY UPSERT the profile - don't rely on trigger
+    console.log('Upserting profile for user:', userId)
+    const { error: profileUpsertError } = await supabaseAdmin
       .from('profiles')
-      .update({
+      .upsert({
+        id: userId,
         full_name: fullName,
         phone: phone,
-        role: role
-      })
-      .eq('id', userId)
+        role: role,
+        is_active: true
+      }, { onConflict: 'id' })
 
-    if (profileUpdateError) {
-      console.error('Error updating profile basics:', profileUpdateError)
+    if (profileUpsertError) {
+      console.error('Error upserting profile:', profileUpsertError)
+      // Don't fail - the trigger might have created a partial profile
+    } else {
+      console.log('Profile upserted successfully')
     }
 
-    // Set PIN hash using the fixed update_pin_only function
+    // Set PIN hash using the database function
+    console.log('Setting PIN hash for user:', userId)
     const { error: pinError } = await supabaseAdmin.rpc('update_pin_only', {
       _user_id: userId,
       _pin: pin
@@ -164,7 +168,7 @@ serve(async (req) => {
 
     if (pinError) {
       console.error('Error setting PIN hash:', pinError)
-      // This is critical - try alternative method
+      // Try alternative method
       const { error: altPinError } = await supabaseAdmin.rpc('update_user_profile_with_pin', {
         _user_id: userId,
         _full_name: fullName,
@@ -174,22 +178,46 @@ serve(async (req) => {
       })
       if (altPinError) {
         console.error('Alternative PIN set also failed:', altPinError)
+      } else {
+        console.log('PIN set via alternative method')
       }
     } else {
-      console.log('PIN hash set successfully for user:', userId)
+      console.log('PIN hash set successfully')
     }
 
-    // Update the user_roles table
-    const { error: roleUpdateError } = await supabaseAdmin
+    // UPSERT the user_roles entry - don't rely on trigger
+    console.log('Upserting user role:', role)
+    const { error: roleUpsertError } = await supabaseAdmin
       .from('user_roles')
-      .update({ role: role })
-      .eq('user_id', userId)
+      .upsert({
+        user_id: userId,
+        role: role
+      }, { onConflict: 'user_id' })
 
-    if (roleUpdateError) {
-      console.error('Error updating role:', roleUpdateError)
+    if (roleUpsertError) {
+      console.error('Error upserting role:', roleUpsertError)
+    } else {
+      console.log('User role upserted successfully')
     }
 
-    console.log('User created successfully:', userId)
+    // Verify profile was created
+    const { data: verifyProfile, error: verifyError } = await supabaseAdmin
+      .from('profiles')
+      .select('id, full_name, phone, role')
+      .eq('id', userId)
+      .single()
+
+    if (verifyError || !verifyProfile) {
+      console.error('Profile verification failed:', verifyError)
+      // Cleanup: delete the auth user since profile creation failed
+      await supabaseAdmin.auth.admin.deleteUser(userId)
+      return new Response(
+        JSON.stringify({ error: 'Failed to create user profile. Please try again.' }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    console.log('User created and verified successfully:', verifyProfile)
 
     return new Response(
       JSON.stringify({ 

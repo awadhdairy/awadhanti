@@ -69,15 +69,64 @@ serve(async (req) => {
       )
     }
 
-    // Get the user ID to delete from request body
-    const { userId } = await req.json()
+    // Parse request body
+    const body = await req.json()
+    const { userId, action, userIds } = body
 
+    // Handle cleanup-orphaned action
+    if (action === 'cleanup-orphaned' && userIds && Array.isArray(userIds)) {
+      console.log('Cleaning up orphaned users:', userIds)
+      const results = []
+      
+      for (const id of userIds) {
+        try {
+          const { error: deleteError } = await supabaseAdmin.auth.admin.deleteUser(id)
+          if (deleteError) {
+            console.error(`Failed to delete orphaned user ${id}:`, deleteError)
+            results.push({ id, success: false, error: deleteError.message })
+          } else {
+            console.log(`Deleted orphaned user: ${id}`)
+            results.push({ id, success: true })
+          }
+        } catch (err) {
+          console.error(`Error deleting orphaned user ${id}:`, err)
+          results.push({ id, success: false, error: String(err) })
+        }
+      }
+
+      // Log the cleanup action
+      await supabaseAdmin
+        .from('activity_logs')
+        .insert({
+          user_id: requestingUser.id,
+          action: 'orphaned_users_cleanup',
+          entity_type: 'user',
+          details: {
+            deleted_count: results.filter(r => r.success).length,
+            failed_count: results.filter(r => !r.success).length,
+            results,
+            deleted_by: requestingUser.email,
+          },
+        })
+
+      return new Response(
+        JSON.stringify({ 
+          success: true, 
+          message: `Cleaned up ${results.filter(r => r.success).length} orphaned users`,
+          results 
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Standard single user deletion
     if (!userId) {
       return new Response(
         JSON.stringify({ error: 'User ID is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
+
 
     // Prevent self-deletion
     if (userId === requestingUser.id) {
