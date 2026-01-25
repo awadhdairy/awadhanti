@@ -24,9 +24,10 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Truck, CheckCircle, XCircle, Clock, Loader2, Calendar, Zap, Palmtree } from "lucide-react";
+import { Truck, CheckCircle, XCircle, Clock, Loader2, Calendar, Zap, Palmtree, Package } from "lucide-react";
 import { format } from "date-fns";
 import { BulkDeliveryActions } from "@/components/deliveries/BulkDeliveryActions";
+import { DeliveryItemsEditor } from "@/components/deliveries/DeliveryItemsEditor";
 import { Badge } from "@/components/ui/badge";
 
 interface Customer {
@@ -56,6 +57,8 @@ export default function DeliveriesPage() {
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [itemsEditorOpen, setItemsEditorOpen] = useState(false);
+  const [selectedDelivery, setSelectedDelivery] = useState<DeliveryWithCustomer | null>(null);
   const [saving, setSaving] = useState(false);
   const [selectedDate, setSelectedDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [statusFilter, setStatusFilter] = useState("all");
@@ -246,6 +249,16 @@ export default function DeliveriesPage() {
       header: "Actions",
       render: (item: DeliveryWithCustomer) => (
         <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => {
+              setSelectedDelivery(item);
+              setItemsEditorOpen(true);
+            }}
+          >
+            <Package className="h-4 w-4 mr-1" /> Items
+          </Button>
           {item.status === "pending" && (
             <>
               <Button
@@ -436,6 +449,17 @@ export default function DeliveriesPage() {
         onOpenChange={setBulkDialogOpen}
         onComplete={fetchData}
       />
+
+      {/* Delivery Items Editor */}
+      {selectedDelivery && (
+        <DeliveryItemsEditor
+          deliveryId={selectedDelivery.id}
+          customerId={selectedDelivery.customer_id}
+          open={itemsEditorOpen}
+          onOpenChange={setItemsEditorOpen}
+          onComplete={fetchData}
+        />
+      )}
     </div>
   );
 }

@@ -6,11 +6,13 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CustomerDeliveryCalendar } from "./CustomerDeliveryCalendar";
 import { 
   User, Phone, MapPin, Calendar, Mail,
   Clock, CheckCircle, XCircle, AlertCircle,
   Package, Receipt, Truck, DollarSign,
-  TrendingUp, CreditCard, Palmtree, ShoppingCart
+  TrendingUp, CreditCard, Palmtree, ShoppingCart,
+  CalendarDays
 } from "lucide-react";
 import { format, parseISO, differenceInDays } from "date-fns";
 
@@ -390,8 +392,12 @@ export function CustomerDetailDialog({ customer, open, onOpenChange }: CustomerD
               </Card>
             </div>
 
-            <Tabs defaultValue="deliveries" className="w-full">
-              <TabsList className="grid w-full grid-cols-5">
+            <Tabs defaultValue="calendar" className="w-full">
+              <TabsList className="grid w-full grid-cols-6">
+                <TabsTrigger value="calendar" className="text-xs">
+                  <CalendarDays className="h-3 w-3 mr-1" />
+                  Calendar
+                </TabsTrigger>
                 <TabsTrigger value="deliveries" className="text-xs">
                   Deliveries ({deliveries.length})
                 </TabsTrigger>
@@ -408,6 +414,15 @@ export function CustomerDetailDialog({ customer, open, onOpenChange }: CustomerD
                   Ledger ({ledger.length})
                 </TabsTrigger>
               </TabsList>
+
+              <TabsContent value="calendar" className="mt-4">
+                <CustomerDeliveryCalendar
+                  deliveries={deliveries}
+                  subscriptions={subscriptions}
+                  vacations={vacations}
+                  subscriptionType={customer.subscription_type}
+                />
+              </TabsContent>
 
               <TabsContent value="deliveries" className="mt-4">
                 <Card>
