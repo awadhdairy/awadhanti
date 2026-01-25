@@ -24,12 +24,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Users, Edit, Trash2, Phone, MapPin, Loader2, Palmtree, BookOpen, Eye } from "lucide-react";
 import { VacationManager } from "@/components/customers/VacationManager";
 import { CustomerLedger } from "@/components/customers/CustomerLedger";
 import { CustomerAccountApprovals } from "@/components/customers/CustomerAccountApprovals";
 import { CustomerDetailDialog } from "@/components/customers/CustomerDetailDialog";
+import {
+  CustomerSubscriptionSelector,
+  CustomerSubscriptionData,
+  defaultSubscriptionData,
+} from "@/components/customers/CustomerSubscriptionSelector";
 
 interface Customer {
   id: string;
@@ -68,6 +74,8 @@ export default function CustomersPage() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState(emptyFormData);
+  const [subscriptionData, setSubscriptionData] = useState<CustomerSubscriptionData>(defaultSubscriptionData);
+  const [dialogTab, setDialogTab] = useState<"details" | "subscription">("details");
   const [saving, setSaving] = useState(false);
   const { toast } = useToast();
 
@@ -111,9 +119,13 @@ export default function CustomersPage() {
         billing_cycle: customer.billing_cycle,
         notes: "",
       });
+      // Don't reset subscription data for existing customer - they manage via CustomerSubscription page
+      setDialogTab("details");
     } else {
       setSelectedCustomer(null);
       setFormData(emptyFormData);
+      setSubscriptionData(defaultSubscriptionData);
+      setDialogTab("details");
     }
     setDialogOpen(true);
   };
@@ -129,33 +141,109 @@ export default function CustomersPage() {
     }
 
     setSaving(true);
+    
+    // Map UI frequency to database subscription_type
+    const subscriptionTypeMap: Record<string, string> = {
+      daily: "daily",
+      alternate: "alternate",
+      weekly: "weekly",
+      custom: "custom",
+    };
+
     const payload = {
       name: formData.name,
       phone: formData.phone || null,
       email: formData.email || null,
       address: formData.address || null,
       area: formData.area || null,
-      subscription_type: formData.subscription_type,
+      subscription_type: selectedCustomer 
+        ? formData.subscription_type 
+        : subscriptionTypeMap[subscriptionData.frequency],
       billing_cycle: formData.billing_cycle,
       notes: formData.notes || null,
     };
 
-    const { error } = selectedCustomer
-      ? await supabase.from("customers").update(payload).eq("id", selectedCustomer.id)
-      : await supabase.from("customers").insert(payload);
+    if (selectedCustomer) {
+      // Update existing customer
+      const { error } = await supabase
+        .from("customers")
+        .update(payload)
+        .eq("id", selectedCustomer.id);
 
-    setSaving(false);
+      setSaving(false);
 
-    if (error) {
-      toast({
-        title: "Error saving customer",
-        description: error.message,
-        variant: "destructive",
-      });
+      if (error) {
+        toast({
+          title: "Error saving customer",
+          description: error.message,
+          variant: "destructive",
+        });
+      } else {
+        toast({
+          title: "Customer updated",
+          description: `${formData.name} has been saved successfully`,
+        });
+        setDialogOpen(false);
+        fetchCustomers();
+      }
     } else {
+      // Create new customer with subscription products
+      const { data: newCustomer, error } = await supabase
+        .from("customers")
+        .insert(payload)
+        .select("id")
+        .single();
+
+      if (error || !newCustomer) {
+        setSaving(false);
+        toast({
+          title: "Error saving customer",
+          description: error?.message || "Failed to create customer",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      // Add subscription products if any
+      if (subscriptionData.products.length > 0) {
+        const productsToInsert = subscriptionData.products.map((p) => ({
+          customer_id: newCustomer.id,
+          product_id: p.product_id,
+          quantity: p.quantity,
+          custom_price: p.custom_price,
+          is_active: true,
+        }));
+
+        const { error: productError } = await supabase
+          .from("customer_products")
+          .insert(productsToInsert);
+
+        if (productError) {
+          console.error("Error adding subscription products:", productError);
+          // Don't fail the whole operation, just log it
+        }
+      }
+
+      // Store delivery schedule in customer notes as JSON metadata
+      // This can be used by the auto-delivery scheduler
+      const scheduleMetadata = {
+        delivery_days: subscriptionData.delivery_days,
+        auto_deliver: subscriptionData.auto_deliver,
+      };
+
+      await supabase
+        .from("customers")
+        .update({ 
+          notes: formData.notes 
+            ? `${formData.notes}\n\n---\nSchedule: ${JSON.stringify(scheduleMetadata)}`
+            : `Schedule: ${JSON.stringify(scheduleMetadata)}`
+        })
+        .eq("id", newCustomer.id);
+
+      setSaving(false);
       toast({
-        title: selectedCustomer ? "Customer updated" : "Customer added",
-        description: `${formData.name} has been saved successfully`,
+        title: "Customer added",
+        description: `${formData.name} has been created with ${subscriptionData.products.length} subscription product(s)`,
       });
       setDialogOpen(false);
       fetchCustomers();
@@ -417,7 +505,7 @@ export default function CustomersPage() {
 
       {/* Add/Edit Dialog */}
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>
               {selectedCustomer ? "Edit Customer" : "Add New Customer"}
@@ -425,138 +513,283 @@ export default function CustomersPage() {
             <DialogDescription>
               {selectedCustomer
                 ? "Update customer information"
-                : "Enter details for the new customer"}
+                : "Enter details and set up subscription products"}
             </DialogDescription>
           </DialogHeader>
 
-          <div className="grid gap-4 py-4">
-            <div className="grid gap-4 sm:grid-cols-2">
+          {/* Show tabs only for new customer */}
+          {!selectedCustomer ? (
+            <Tabs value={dialogTab} onValueChange={(v) => setDialogTab(v as typeof dialogTab)}>
+              <TabsList className="grid w-full grid-cols-2">
+                <TabsTrigger value="details">1. Customer Details</TabsTrigger>
+                <TabsTrigger value="subscription" disabled={!formData.name}>
+                  2. Subscription Products
+                </TabsTrigger>
+              </TabsList>
+
+              <TabsContent value="details" className="space-y-4 mt-4">
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Name *</Label>
+                    <Input
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) =>
+                        setFormData({ ...formData, name: e.target.value })
+                      }
+                      placeholder="Customer name"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Phone</Label>
+                    <Input
+                      id="phone"
+                      value={formData.phone}
+                      onChange={(e) =>
+                        setFormData({ ...formData, phone: e.target.value })
+                      }
+                      placeholder="+91 98765 43210"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <Label htmlFor="email">Email</Label>
+                    <Input
+                      id="email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) =>
+                        setFormData({ ...formData, email: e.target.value })
+                      }
+                      placeholder="customer@email.com"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="area">Area</Label>
+                    <Input
+                      id="area"
+                      value={formData.area}
+                      onChange={(e) =>
+                        setFormData({ ...formData, area: e.target.value })
+                      }
+                      placeholder="e.g., Sector 15, Noida"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <Textarea
+                    id="address"
+                    value={formData.address}
+                    onChange={(e) =>
+                      setFormData({ ...formData, address: e.target.value })
+                    }
+                    placeholder="Full address"
+                    rows={2}
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="billing_cycle">Billing Cycle</Label>
+                  <Select
+                    value={formData.billing_cycle}
+                    onValueChange={(v) =>
+                      setFormData({ ...formData, billing_cycle: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="notes">Notes</Label>
+                  <Textarea
+                    id="notes"
+                    value={formData.notes}
+                    onChange={(e) =>
+                      setFormData({ ...formData, notes: e.target.value })
+                    }
+                    placeholder="Any additional notes..."
+                    rows={2}
+                  />
+                </div>
+
+                <div className="flex justify-end gap-2 pt-4">
+                  <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button 
+                    onClick={() => setDialogTab("subscription")}
+                    disabled={!formData.name}
+                  >
+                    Next: Select Products
+                  </Button>
+                </div>
+              </TabsContent>
+
+              <TabsContent value="subscription" className="mt-4">
+                <CustomerSubscriptionSelector
+                  value={subscriptionData}
+                  onChange={setSubscriptionData}
+                />
+
+                <div className="flex justify-between gap-2 pt-4 mt-4 border-t">
+                  <Button variant="outline" onClick={() => setDialogTab("details")}>
+                    Back
+                  </Button>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleSave} disabled={saving}>
+                      {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                      Create Customer
+                    </Button>
+                  </div>
+                </div>
+              </TabsContent>
+            </Tabs>
+          ) : (
+            /* Edit existing customer - simple form without subscription */
+            <div className="grid gap-4 py-4">
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="name">Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) =>
+                      setFormData({ ...formData, name: e.target.value })
+                    }
+                    placeholder="Customer name"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Phone</Label>
+                  <Input
+                    id="phone"
+                    value={formData.phone}
+                    onChange={(e) =>
+                      setFormData({ ...formData, phone: e.target.value })
+                    }
+                    placeholder="+91 98765 43210"
+                  />
+                </div>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                    placeholder="customer@email.com"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="area">Area</Label>
+                  <Input
+                    id="area"
+                    value={formData.area}
+                    onChange={(e) =>
+                      setFormData({ ...formData, area: e.target.value })
+                    }
+                    placeholder="e.g., Sector 15, Noida"
+                  />
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="name">Name *</Label>
-                <Input
-                  id="name"
-                  value={formData.name}
+                <Label htmlFor="address">Address</Label>
+                <Textarea
+                  id="address"
+                  value={formData.address}
                   onChange={(e) =>
-                    setFormData({ ...formData, name: e.target.value })
+                    setFormData({ ...formData, address: e.target.value })
                   }
-                  placeholder="Customer name"
+                  placeholder="Full address"
+                  rows={2}
                 />
               </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="subscription_type">Subscription Type</Label>
+                  <Select
+                    value={formData.subscription_type}
+                    onValueChange={(v) =>
+                      setFormData({ ...formData, subscription_type: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="alternate">Alternate Days</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="custom">Custom</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="billing_cycle">Billing Cycle</Label>
+                  <Select
+                    value={formData.billing_cycle}
+                    onValueChange={(v) =>
+                      setFormData({ ...formData, billing_cycle: v })
+                    }
+                  >
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="daily">Daily</SelectItem>
+                      <SelectItem value="weekly">Weekly</SelectItem>
+                      <SelectItem value="monthly">Monthly</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone</Label>
-                <Input
-                  id="phone"
-                  value={formData.phone}
+                <Label htmlFor="notes">Notes</Label>
+                <Textarea
+                  id="notes"
+                  value={formData.notes}
                   onChange={(e) =>
-                    setFormData({ ...formData, phone: e.target.value })
+                    setFormData({ ...formData, notes: e.target.value })
                   }
-                  placeholder="+91 98765 43210"
+                  placeholder="Any additional notes..."
+                  rows={2}
                 />
               </div>
-            </div>
 
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  placeholder="customer@email.com"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="area">Area</Label>
-                <Input
-                  id="area"
-                  value={formData.area}
-                  onChange={(e) =>
-                    setFormData({ ...formData, area: e.target.value })
-                  }
-                  placeholder="e.g., Sector 15, Noida"
-                />
+              <div className="flex justify-end gap-2 pt-4">
+                <Button variant="outline" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button onClick={handleSave} disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  Update Customer
+                </Button>
               </div>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="address">Address</Label>
-              <Textarea
-                id="address"
-                value={formData.address}
-                onChange={(e) =>
-                  setFormData({ ...formData, address: e.target.value })
-                }
-                placeholder="Full address"
-                rows={2}
-              />
-            </div>
-
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="subscription_type">Subscription Type</Label>
-                <Select
-                  value={formData.subscription_type}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, subscription_type: v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="alternate">Alternate Days</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="custom">Custom</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="billing_cycle">Billing Cycle</Label>
-                <Select
-                  value={formData.billing_cycle}
-                  onValueChange={(v) =>
-                    setFormData({ ...formData, billing_cycle: v })
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Daily</SelectItem>
-                    <SelectItem value="weekly">Weekly</SelectItem>
-                    <SelectItem value="monthly">Monthly</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="notes">Notes</Label>
-              <Textarea
-                id="notes"
-                value={formData.notes}
-                onChange={(e) =>
-                  setFormData({ ...formData, notes: e.target.value })
-                }
-                placeholder="Any additional notes..."
-                rows={2}
-              />
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={handleSave} disabled={saving}>
-              {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              {selectedCustomer ? "Update" : "Add"} Customer
-            </Button>
-          </div>
+          )}
         </DialogContent>
       </Dialog>
 
