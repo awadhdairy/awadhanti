@@ -83,7 +83,7 @@ serve(async (req) => {
       )
     }
 
-    // Check if phone number already exists
+    // Check if phone number already exists in profiles
     const { data: existingProfile } = await supabaseAdmin
       .from('profiles')
       .select('id')
@@ -99,6 +99,18 @@ serve(async (req) => {
 
     // Create the auth user - MUST match domain used in Auth.tsx login
     const email = `${phone}@awadhdairy.com`
+
+    // Check if email already exists in auth (handles edge case where profile was deleted but auth user remains)
+    const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers()
+    const emailExists = existingUsers?.users?.some(u => u.email === email)
+    
+    if (emailExists) {
+      return new Response(
+        JSON.stringify({ error: 'A user with this phone number already exists in the system. Please use a different phone number or contact support to reset the existing account.' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
     const { data: authData, error: createError } = await supabaseAdmin.auth.admin.createUser({
       email,
       password: pin,
@@ -111,8 +123,15 @@ serve(async (req) => {
 
     if (createError) {
       console.error('Error creating user:', createError)
+      // Provide user-friendly error messages
+      let errorMessage = 'Failed to create user'
+      if (createError.message?.includes('already been registered')) {
+        errorMessage = 'A user with this phone number already exists. Please use a different phone number.'
+      } else if (createError.message) {
+        errorMessage = createError.message
+      }
       return new Response(
-        JSON.stringify({ error: createError.message }),
+        JSON.stringify({ error: errorMessage }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       )
     }
