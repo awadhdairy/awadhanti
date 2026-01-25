@@ -6,6 +6,7 @@ import { QuickActionsCard } from "./QuickActionsCard";
 import { ProductionChart } from "./ProductionChart";
 import { ProductionInsights } from "./ProductionInsights";
 import { ExpenseAutomationCard } from "./ExpenseAutomationCard";
+import { DeliveryAutomationCard } from "./DeliveryAutomationCard";
 import { useBreedingAlerts } from "@/hooks/useBreedingAlerts";
 import { BreedingAlertsPanel } from "@/components/breeding/BreedingAlertsPanel";
 import { DashboardSkeleton } from "@/components/common/LoadingSkeleton";
@@ -101,7 +102,7 @@ export function AdminDashboard() {
       </motion.div>
 
       <motion.div 
-        className="grid gap-4 lg:grid-cols-2"
+        className="grid gap-4 lg:grid-cols-3"
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4, delay: 0.5 }}
@@ -115,6 +116,7 @@ export function AdminDashboard() {
           showViewAll={true}
           onViewAll={() => navigate("/breeding")}
         />
+        <DeliveryAutomationCard />
         <ExpenseAutomationCard />
       </motion.div>
     </motion.div>
