@@ -1,262 +1,211 @@
 
-## Enhanced Dashboard with Charts and Analytics
+## Mobile Responsiveness Enhancement Plan
 
 ### Overview
-
-Add a comprehensive analytics section to the Admin Dashboard with multiple chart types showing growth trends, comparisons, and key performance indicators. The charts will use the existing `recharts` library and follow the current design patterns.
-
----
-
-### Data Sources Available
-
-Based on the database schema, we can visualize:
-
-| Data Category | Tables | Metrics |
-|--------------|--------|---------|
-| **Production** | `milk_production` | Daily/weekly/monthly trends, morning vs evening, per-cattle performance |
-| **Revenue** | `invoices`, `payments` | Monthly revenue growth, collection rates, pending amounts |
-| **Expenses** | `expenses` | Category-wise breakdown, monthly trends |
-| **Customers** | `customers`, `deliveries` | Growth rate, active vs inactive, delivery completion |
-| **Cattle** | `cattle`, `breeding_records` | Herd composition, lactation status, breeding cycles |
-| **Procurement** | `milk_procurement` | Vendor-wise, quality metrics (FAT/SNF) |
+This plan focuses on making minimal, targeted CSS and component changes to ensure all pages work beautifully on mobile without breaking any existing functionality or automation.
 
 ---
 
-### New Dashboard Components
-
-#### 1. Revenue Growth Chart (Area Chart)
-**File:** `src/components/dashboard/RevenueGrowthChart.tsx`
-
-- **Chart Type:** Area chart with gradient fill
-- **Data:** Last 6 months revenue comparison
-- **Metrics:** Total billed, collected, pending
-- **Color scheme:** Green gradient for revenue growth
-
-```text
-+------------------------------------------+
-|  Revenue Growth (Last 6 Months)          |
-|  ┌────────────────────────────────────┐  |
-|  │        ╱╲                          │  |
-|  │   ╱╲  ╱  ╲    ╱╲                   │  |
-|  │  ╱  ╲╱    ╲  ╱  ╲ ╱╲               │  |
-|  │ ╱          ╲╱    ╲╱  ╲              │  |
-|  └────────────────────────────────────┘  |
-|  Jan  Feb  Mar  Apr  May  Jun            |
-+------------------------------------------+
-```
+### Current Strengths (No Changes Needed)
+- ResponsiveDialog component already exists and works correctly
+- Mobile navigation (MobileNavbar, QuickActionFab) is well-implemented
+- CSS already includes safe areas, touch targets, and mobile utilities
+- DashboardLayout correctly handles mobile/desktop layout switching
 
 ---
 
-#### 2. Expense Category Pie Chart
-**File:** `src/components/dashboard/ExpensePieChart.tsx`
+### Changes Required
 
-- **Chart Type:** Donut/Pie chart
-- **Data:** Current month expenses by category
-- **Categories:** Feed, Veterinary, Equipment, Salary, Utilities, Others
-- **Interactive:** Hover to show amounts
+#### Phase 1: CSS-Only Improvements (index.css)
+**Priority: High | Risk: Very Low**
 
----
+Add mobile-specific utility classes for common issues:
 
-#### 3. Cattle Herd Composition Chart
-**File:** `src/components/dashboard/CattleCompositionChart.tsx`
+| Addition | Purpose |
+|----------|---------|
+| Scrollable tabs container | Prevent TabsList overflow on mobile |
+| Mobile table improvements | Better table readability on small screens |
+| Form grid responsive fixes | Stack form fields on mobile |
+| Chart height adjustments | Reduce chart heights on mobile |
 
-- **Chart Type:** Horizontal bar chart or stacked bar
-- **Data:** Cattle distribution by status
-- **Segments:** Lactating, Dry, Pregnant, Heifer, Bull
-- **Color coding:** Different colors for each status
+```css
+/* Scrollable TabsList for mobile */
+@media (max-width: 768px) {
+  .tabs-scroll {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tabs-scroll::-webkit-scrollbar {
+    display: none;
+  }
+}
 
----
-
-#### 4. Delivery Performance Chart
-**File:** `src/components/dashboard/DeliveryPerformanceChart.tsx`
-
-- **Chart Type:** Radial bar chart / Progress ring
-- **Data:** Today's and weekly delivery completion rate
-- **Metrics:** Delivered vs Pending vs Cancelled
-- **Visual:** Circular progress indicator
-
----
-
-#### 5. Month-over-Month Comparison Card
-**File:** `src/components/dashboard/MonthComparisonChart.tsx`
-
-- **Chart Type:** Grouped bar chart
-- **Data:** This month vs last month
-- **Metrics:** Production, Revenue, Customers, Deliveries
-- **Shows:** Growth/decline percentages
-
----
-
-#### 6. Customer Growth Trend
-**File:** `src/components/dashboard/CustomerGrowthChart.tsx`
-
-- **Chart Type:** Line chart with points
-- **Data:** Customer acquisition over last 12 months
-- **Additional:** Active vs Total customers comparison
-
----
-
-#### 7. Procurement vs Production Comparison
-**File:** `src/components/dashboard/ProcurementProductionChart.tsx`
-
-- **Chart Type:** Dual-axis combo chart (Bar + Line)
-- **Data:** Daily milk procured vs produced (last 7 days)
-- **Purpose:** Compare external procurement with farm production
-
----
-
-### Updated Dashboard Hook
-
-**File:** `src/hooks/useDashboardCharts.ts`
-
-New hook to fetch all chart data efficiently:
-
-```typescript
-interface DashboardChartData {
-  revenueGrowth: MonthlyRevenue[];
-  expenseBreakdown: ExpenseCategory[];
-  cattleComposition: CattleStatus[];
-  deliveryPerformance: DeliveryStats;
-  monthComparison: MonthComparison;
-  customerGrowth: CustomerTrend[];
-  procurementVsProduction: DailyComparison[];
+/* Mobile-friendly table */
+@media (max-width: 768px) {
+  .mobile-table-scroll {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
 }
 ```
 
-- Parallel data fetching for performance
-- 5-minute cache time
-- Graceful error handling
+---
+
+#### Phase 2: Tabs Component Enhancement
+**Priority: High | Risk: Low**
+
+**File:** `src/components/ui/tabs.tsx`
+
+**Change:** Add horizontal scroll capability to TabsList on mobile
+
+**Impact:** Prevents tab overflow on pages like Reports, Employees, Settings
 
 ---
 
-### Updated Admin Dashboard Layout
+#### Phase 3: Dialog to ResponsiveDialog Replacements
+**Priority: High | Risk: Low**
 
-**File:** `src/components/dashboard/AdminDashboard.tsx`
+Replace standard Dialog imports with ResponsiveDialog in these files:
 
-New layout structure:
+| File | Dialog Usage |
+|------|-------------|
+| `src/pages/Cattle.tsx` | Add/Edit cattle form |
+| `src/pages/Production.tsx` | Production entry form |
+| `src/pages/Deliveries.tsx` | Add/Edit delivery form |
+| `src/pages/Billing.tsx` | Payment dialog |
+| `src/pages/Employees.tsx` | Attendance and payroll dialogs |
+| `src/pages/Settings.tsx` | PIN change dialog |
+| `src/pages/Health.tsx` | Health record forms |
+| `src/pages/Inventory.tsx` | Inventory forms |
+| `src/pages/Expenses.tsx` | Expense forms |
+| `src/pages/MilkProcurement.tsx` | Procurement forms |
 
-```text
-+--------------------------------------------------+
-|  Quick Actions Card                              |
-+--------------------------------------------------+
-|  Stat Cards (4 columns)                          |
-+--------------------------------------------------+
-|  Weekly Production  |  Recent Activity           |
-|  (existing)         |  (existing)                |
-+--------------------------------------------------+
-|  Revenue Growth Chart (full width)               |
-+--------------------------------------------------+
-|  Expense Pie  |  Cattle Composition  |  Delivery |
-|  Chart        |  Chart               |  Progress |
-+--------------------------------------------------+
-|  Month Comparison  |  Customer Growth            |
-+--------------------------------------------------+
-|  Production Insights (existing)                  |
-+--------------------------------------------------+
-|  Breeding Alerts | Delivery Auto | Expense Auto  |
-+--------------------------------------------------+
-```
-
----
-
-### Implementation Details
-
-#### Chart Styling Guidelines
-
-All charts will follow the existing design system:
-- Use CSS variables: `hsl(var(--chart-1))` through `hsl(var(--chart-5))`
-- Consistent tooltip styling matching `ProductionChart.tsx`
-- Responsive containers using `ResponsiveContainer`
-- Loading skeletons matching existing patterns
-- Framer Motion animations for entry effects
-
-#### Color Palette for Charts
-
+**Change Pattern:**
 ```typescript
-const CHART_COLORS = {
-  primary: 'hsl(152, 45%, 28%)',    // Green (production)
-  secondary: 'hsl(158, 50%, 45%)',  // Light green
-  success: 'hsl(142, 76%, 36%)',    // Success green
-  warning: 'hsl(38, 92%, 50%)',     // Amber
-  info: 'hsl(199, 89%, 48%)',       // Blue
-  destructive: 'hsl(0, 72%, 51%)',  // Red
-};
+// Before
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+// After
+import { 
+  ResponsiveDialog, 
+  ResponsiveDialogContent, 
+  ResponsiveDialogHeader, 
+  ResponsiveDialogTitle, 
+  ResponsiveDialogDescription 
+} from "@/components/ui/responsive-dialog";
 ```
 
 ---
 
-### Files to Create
+#### Phase 4: Production Page Form Fix
+**Priority: High | Risk: Medium**
 
-| File | Purpose |
-|------|---------|
-| `src/hooks/useDashboardCharts.ts` | Data fetching hook for all charts |
-| `src/components/dashboard/RevenueGrowthChart.tsx` | 6-month revenue area chart |
-| `src/components/dashboard/ExpensePieChart.tsx` | Expense category donut chart |
-| `src/components/dashboard/CattleCompositionChart.tsx` | Herd status bar chart |
-| `src/components/dashboard/DeliveryPerformanceChart.tsx` | Delivery completion radial chart |
-| `src/components/dashboard/MonthComparisonChart.tsx` | This vs last month comparison |
-| `src/components/dashboard/CustomerGrowthChart.tsx` | Customer acquisition trend |
+**File:** `src/pages/Production.tsx`
+
+**Issue:** The 12-column grid for cattle entries breaks on mobile
+
+**Solution:** Convert to a responsive card-based layout on mobile:
+- Desktop: Keep current grid layout
+- Mobile: Stack fields vertically with clear labels
+
+---
+
+#### Phase 5: Stats Card Grid Improvements
+**Priority: Medium | Risk: Very Low**
+
+**Files:** Multiple pages with stats cards
+
+**Change:** Ensure all stats grids use responsive classes
+
+```tsx
+// Current (some pages)
+<div className="grid gap-4 grid-cols-4">
+
+// Updated (all pages)
+<div className="grid gap-4 grid-cols-2 lg:grid-cols-4">
+```
+
+Pages to update:
+- Dashboard charts section already uses responsive grid
+- No changes needed for AdminDashboard.tsx (already responsive)
+
+---
+
+#### Phase 6: Chart Mobile Optimization
+**Priority: Medium | Risk: Very Low**
+
+**Files:** Dashboard chart components
+
+**Changes:**
+- Reduce chart heights from 300px to 240px on mobile
+- Simplify legends on mobile
+- Already using ResponsiveContainer (good)
+
+---
+
+#### Phase 7: DataTable Mobile Enhancement
+**Priority: Medium | Risk: Low**
+
+**File:** `src/components/common/DataTable.tsx`
+
+**Change:** Add horizontal scroll wrapper and improve pagination on mobile
+
+- Wrap table in scrollable container on mobile
+- Simplify pagination display on mobile
+- Already has `useIsMobile` hook imported
+
+---
 
 ### Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/components/dashboard/AdminDashboard.tsx` | Add new chart components to layout |
+| `src/index.css` | Add mobile utility classes |
+| `src/components/ui/tabs.tsx` | Add scroll capability to TabsList |
+| `src/components/common/DataTable.tsx` | Mobile scroll wrapper, simplified pagination |
+| `src/pages/Cattle.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Production.tsx` | Replace Dialog + fix mobile form layout |
+| `src/pages/Deliveries.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Billing.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Employees.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Settings.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Health.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Expenses.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/Inventory.tsx` | Replace Dialog with ResponsiveDialog |
+| `src/pages/MilkProcurement.tsx` | Replace Dialog with ResponsiveDialog |
 
 ---
 
-### Technical Considerations
+### Technical Approach
 
-1. **Performance**: All queries run in parallel using `Promise.all`
-2. **Caching**: 5-minute stale time to reduce database load
-3. **Responsive**: Charts adapt to mobile/tablet/desktop
-4. **Empty States**: Graceful handling when no data exists
-5. **Skeleton Loading**: Consistent loading states for each chart
-6. **Animations**: Smooth entry animations using Framer Motion
-
----
-
-### Chart Component Structure
-
-Each chart component will follow this pattern:
-
-```typescript
-export function ChartComponent() {
-  const { data, isLoading } = useQuery({
-    queryKey: ["chart-name"],
-    queryFn: fetchChartData,
-    staleTime: 5 * 60 * 1000,
-  });
-
-  if (isLoading) return <ChartSkeleton />;
-  if (!data?.length) return <EmptyChartState />;
-
-  return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-      <Card>
-        <CardHeader>
-          <CardTitle>Chart Title</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <ResponsiveContainer>
-            {/* Chart implementation */}
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-    </motion.div>
-  );
-}
-```
+1. **Import Swap Pattern**: Simple find-replace for Dialog imports
+2. **Component Swap Pattern**: ResponsiveDialog is a drop-in replacement
+3. **CSS Additions**: Purely additive, no modifications to existing styles
+4. **Grid Fixes**: Only update classes, no structural changes
+5. **No Functionality Changes**: All automations and business logic remain untouched
 
 ---
 
-### Result After Implementation
+### What Will NOT Be Changed
 
-- 6 new chart components providing comprehensive business insights
-- Visual comparisons for growth tracking
-- Category-wise expense analysis
-- Herd health and composition overview
-- Delivery performance tracking
-- Customer acquisition trends
-- Procurement vs production analysis
-- All charts mobile-responsive with smooth animations
+- No changes to hooks or data fetching logic
+- No changes to form validation or submission
+- No changes to authentication flow
+- No changes to navigation structure
+- No changes to Supabase integration
+- No changes to automation hooks (useAutoAttendance, useAutoDeliveryScheduler, etc.)
+- No changes to PDF generation or export functionality
+
+---
+
+### Expected Results
+
+After implementation:
+- All dialogs slide up as bottom sheets on mobile
+- Tabs scroll horizontally without overflow
+- Forms are usable with on-screen keyboard
+- Tables scroll horizontally on small screens
+- Stats display in 2-column grid on mobile
+- No horizontal page overflow anywhere
+- All existing functionality preserved
