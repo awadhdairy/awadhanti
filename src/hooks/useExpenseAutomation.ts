@@ -264,6 +264,7 @@ export function useExpenseAutomation() {
 
   /**
    * Log milk procurement expense when payment is marked as paid
+   * @deprecated Use logVendorPaymentExpense for lump-sum vendor payments instead
    */
   const logMilkProcurementExpense = async (
     vendorName: string,
@@ -287,6 +288,30 @@ export function useExpenseAutomation() {
     });
   };
 
+  /**
+   * Log vendor payment expense when lump-sum payment is made to a milk vendor
+   */
+  const logVendorPaymentExpense = async (
+    vendorName: string,
+    amount: number,
+    paymentDate: string,
+    paymentId: string,
+    paymentMode: string,
+    referenceNumber?: string
+  ): Promise<boolean> => {
+    if (amount <= 0) return false;
+
+    return await createExpense({
+      category: "feed",
+      title: `Vendor Payment - ${vendorName}`,
+      amount,
+      expense_date: paymentDate,
+      notes: `Payment via ${paymentMode}${referenceNumber ? ` (Ref: ${referenceNumber})` : ''}`,
+      reference_type: "vendor_payment",
+      reference_id: paymentId,
+    });
+  };
+
   return {
     createExpense,
     logSalaryExpense,
@@ -299,5 +324,6 @@ export function useExpenseAutomation() {
     logTransportExpense,
     logUtilityExpense,
     logMilkProcurementExpense,
+    logVendorPaymentExpense,
   };
 }

@@ -45,7 +45,12 @@ async function fetchAutoExpenseStats() {
 
   // Categorize auto expenses
   const salaryExpenses = expenses.filter(e => e.notes?.includes("payroll:"));
-  const feedExpenses = expenses.filter(e => e.notes?.includes("feed_purchase:") || e.notes?.includes("feed_"));
+  const feedExpenses = expenses.filter(e => 
+    e.notes?.includes("feed_purchase:") || 
+    e.notes?.includes("feed_") || 
+    e.notes?.includes("vendor_payment:") ||
+    e.notes?.includes("milk_procurement:")
+  );
   const equipmentExpenses = expenses.filter(e => e.notes?.includes("equipment:"));
   const maintenanceExpenses = expenses.filter(e => e.notes?.includes("maintenance:"));
   const healthExpenses = expenses.filter(e => e.notes?.includes("health:"));
@@ -62,7 +67,7 @@ async function fetchAutoExpenseStats() {
     },
     {
       category: "feed",
-      label: "Feed & Inventory",
+      label: "Feed & Procurement",
       icon: Package,
       color: "text-success",
       bgColor: "bg-success/10",

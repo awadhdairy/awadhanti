@@ -21,6 +21,7 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useExpenseAutomation } from "@/hooks/useExpenseAutomation";
 import { format } from "date-fns";
 import {
   IndianRupee,
@@ -91,6 +92,7 @@ export function VendorPaymentsDialog({
   const [paymentForm, setPaymentForm] = useState<PaymentFormData>(emptyPaymentForm);
   const [vendorBalance, setVendorBalance] = useState<number>(0);
   const { toast } = useToast();
+  const { logVendorPaymentExpense } = useExpenseAutomation();
 
   useEffect(() => {
     if (open && vendor) {
@@ -158,21 +160,38 @@ export function VendorPaymentsDialog({
 
     setSaving(true);
 
-    const { error } = await supabase.from("vendor_payments").insert({
-      vendor_id: vendor.id,
-      payment_date: paymentForm.payment_date,
-      amount,
-      payment_mode: paymentForm.payment_mode,
-      reference_number: paymentForm.reference_number || null,
-      notes: paymentForm.notes || null,
-    });
+    const { data, error } = await supabase
+      .from("vendor_payments")
+      .insert({
+        vendor_id: vendor.id,
+        payment_date: paymentForm.payment_date,
+        amount,
+        payment_mode: paymentForm.payment_mode,
+        reference_number: paymentForm.reference_number || null,
+        notes: paymentForm.notes || null,
+      })
+      .select()
+      .single();
 
     if (error) {
       toast({ title: "Error", description: error.message, variant: "destructive" });
     } else {
+      // Auto-log expense for vendor payment
+      if (data) {
+        const modeLabel = paymentModes.find(m => m.value === paymentForm.payment_mode)?.label || paymentForm.payment_mode;
+        await logVendorPaymentExpense(
+          vendor.name,
+          amount,
+          paymentForm.payment_date,
+          data.id,
+          modeLabel,
+          paymentForm.reference_number || undefined
+        );
+      }
+      
       toast({
-        title: "Payment recorded",
-        description: `₹${amount.toLocaleString()} paid to ${vendor.name}`,
+        title: "Payment recorded & expense logged",
+        description: `₹${amount.toLocaleString()} paid to ${vendor.name} - auto-tracked in expenses`,
       });
       setPaymentForm(emptyPaymentForm);
       setShowAddForm(false);

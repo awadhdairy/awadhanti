@@ -50,7 +50,7 @@ const categoryColors: Record<string, string> = {
 };
 
 const categoryLabels: Record<string, string> = {
-  feed: "Feed & Fodder",
+  feed: "Feed & Procurement",
   medicine: "Medicine",
   salary: "Salary",
   transport: "Transport",
