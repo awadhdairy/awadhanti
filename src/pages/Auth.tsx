@@ -67,28 +67,92 @@ export default function Auth() {
     }
 
     setLoading(true);
-
     const email = phoneToEmail(cleanPhone);
-    
-    const { error } = await supabase.auth.signInWithPassword({
+
+    // Step 1: Try native Supabase Auth login
+    const { data, error } = await supabase.auth.signInWithPassword({
       email,
       password: pin,
     });
 
-    setLoading(false);
-
-    if (error) {
-      toast({
-        title: "Login failed",
-        description: sanitizeError(error, "Invalid mobile number or PIN. Please try again."),
-        variant: "destructive",
-      });
-    } else {
+    if (!error && data?.session) {
+      // Success - user already has auth account
+      setLoading(false);
       toast({
         title: "Welcome back!",
         description: "Successfully logged in.",
       });
       navigate('/dashboard');
+      return;
+    }
+
+    // Step 2: Fallback - verify PIN against profiles table for legacy users
+    // Using any type because verify_staff_pin is a custom function not in generated types
+    const { data: verifyData, error: verifyError } = await (supabase.rpc as any)('verify_staff_pin', {
+      _phone: cleanPhone,
+      _pin: pin
+    });
+
+    const verifyResults = verifyData as { user_id: string; is_active: boolean; full_name: string; role: string }[] | null;
+
+    if (verifyError || !verifyResults || verifyResults.length === 0) {
+      setLoading(false);
+      toast({
+        title: "Login failed",
+        description: "Invalid mobile number or PIN. Please try again.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const staffUser = verifyResults[0];
+
+    // Check if user is active
+    if (!staffUser.is_active) {
+      setLoading(false);
+      toast({
+        title: "Account Inactive",
+        description: "Your account has been deactivated. Contact admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Step 3: PIN valid - create auth account for legacy user
+    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      email,
+      password: pin,
+      options: {
+        data: {
+          phone: cleanPhone,
+          full_name: staffUser.full_name,
+        },
+      },
+    });
+
+    setLoading(false);
+
+    if (signUpError) {
+      toast({
+        title: "Login failed",
+        description: "Unable to complete login. Please contact admin.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (signUpData?.session) {
+      toast({
+        title: "Welcome back!",
+        description: "Successfully logged in.",
+      });
+      navigate('/dashboard');
+    } else {
+      // Email confirmation might be required
+      toast({
+        title: "Account Created",
+        description: "Please try logging in again.",
+      });
     }
   };
 
