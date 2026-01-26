@@ -208,7 +208,18 @@ export default function UserManagement() {
         }
       }
 
-      // Step 1: Create auth user using signUp
+      // Step 1: Save current admin session before creating new user
+      // signUp() automatically logs in the new user, so we need to preserve admin session
+      const { data: currentSession } = await supabase.auth.getSession();
+      if (!currentSession.session) {
+        throw new Error("Admin session not found. Please log in again.");
+      }
+      const adminTokens = {
+        access_token: currentSession.session.access_token,
+        refresh_token: currentSession.session.refresh_token,
+      };
+
+      // Step 2: Create auth user using signUp (this will switch session to new user)
       const email = `${phone}@awadhdairy.com`;
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
@@ -221,6 +232,12 @@ export default function UserManagement() {
         },
       });
 
+      // Step 3: Immediately restore admin session regardless of signUp result
+      await supabase.auth.setSession({
+        access_token: adminTokens.access_token,
+        refresh_token: adminTokens.refresh_token,
+      });
+
       if (signUpError) {
         throw new Error(signUpError.message);
       }
@@ -229,7 +246,7 @@ export default function UserManagement() {
         throw new Error("Failed to create user account");
       }
 
-      // Step 2: Set up profile and role via RPC
+      // Step 4: Set up profile and role via RPC (now running as admin again)
       const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_staff_user', {
         _user_id: signUpData.user.id,
         _full_name: fullName,
