@@ -221,34 +221,50 @@ export default function UserManagement() {
 
       // Step 2: Create auth user using signUp (this will switch session to new user)
       const email = `${phone}@awadhdairy.com`;
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: pin,
-        options: {
-          data: {
-            phone,
-            full_name: fullName,
+      let signUpData;
+      let signUpError;
+      
+      try {
+        const result = await supabase.auth.signUp({
+          email,
+          password: pin,
+          options: {
+            data: {
+              phone,
+              full_name: fullName,
+            },
           },
-        },
-      });
-
-      // Step 3: Immediately restore admin session regardless of signUp result
-      await supabase.auth.setSession({
-        access_token: adminTokens.access_token,
-        refresh_token: adminTokens.refresh_token,
-      });
+        });
+        signUpData = result.data;
+        signUpError = result.error;
+      } finally {
+        // Step 3: ALWAYS restore admin session, even if signUp fails
+        const { error: restoreError } = await supabase.auth.setSession({
+          access_token: adminTokens.access_token,
+          refresh_token: adminTokens.refresh_token,
+        });
+        
+        if (restoreError) {
+          console.error("Failed to restore admin session:", restoreError);
+          toast.error("Session error. Please log in again.");
+          navigate("/auth");
+          return;
+        }
+      }
 
       if (signUpError) {
         throw new Error(signUpError.message);
       }
 
-      if (!signUpData.user) {
+      if (!signUpData?.user) {
         throw new Error("Failed to create user account");
       }
 
+      const newUserId = signUpData.user.id;
+
       // Step 4: Set up profile and role via RPC (now running as admin again)
       const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_staff_user', {
-        _user_id: signUpData.user.id,
+        _user_id: newUserId,
         _full_name: fullName,
         _phone: phone,
         _role: selectedRole as UserRole,

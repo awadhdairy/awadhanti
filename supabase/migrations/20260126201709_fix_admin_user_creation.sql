@@ -17,6 +17,9 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 SET search_path TO 'public', 'extensions'
 AS $$
+DECLARE
+  _profile_updated boolean := false;
+  _role_updated boolean := false;
 BEGIN
   -- Verify caller is super_admin
   IF NOT public.has_role(auth.uid(), 'super_admin') THEN
@@ -26,6 +29,16 @@ BEGIN
   -- Validate PIN format
   IF NOT (_pin ~ '^\d{6}$') THEN
     RETURN json_build_object('success', false, 'error', 'PIN must be exactly 6 digits');
+  END IF;
+
+  -- Validate user_id corresponds to an existing auth user (created by signUp)
+  IF NOT EXISTS (SELECT 1 FROM auth.users WHERE id = _user_id) THEN
+    RETURN json_build_object('success', false, 'error', 'Invalid user ID - auth user does not exist');
+  END IF;
+
+  -- Check phone uniqueness (excluding the target user)
+  IF EXISTS (SELECT 1 FROM public.profiles WHERE phone = _phone AND id != _user_id) THEN
+    RETURN json_build_object('success', false, 'error', 'Phone number already in use by another user');
   END IF;
 
   -- Update the profile that was created by handle_new_user trigger
@@ -39,8 +52,10 @@ BEGIN
     is_active = true
   WHERE id = _user_id;
 
+  _profile_updated := FOUND;
+
   -- Check if profile was updated
-  IF NOT FOUND THEN
+  IF NOT _profile_updated THEN
     -- Profile doesn't exist yet (trigger might not have fired), create it
     INSERT INTO public.profiles (id, full_name, phone, role, pin_hash, is_active)
     VALUES (_user_id, _full_name, _phone, _role, crypt(_pin, gen_salt('bf')), true)
@@ -51,14 +66,27 @@ BEGIN
       role = EXCLUDED.role,
       pin_hash = EXCLUDED.pin_hash,
       is_active = EXCLUDED.is_active;
+    _profile_updated := true;
   END IF;
 
   -- Update user_roles table (authoritative source for RLS policies)
   INSERT INTO public.user_roles (user_id, role)
   VALUES (_user_id, _role)
   ON CONFLICT (user_id) DO UPDATE SET role = EXCLUDED.role;
+  
+  _role_updated := true;
+
+  -- Verify both updates succeeded
+  IF NOT _profile_updated OR NOT _role_updated THEN
+    RAISE EXCEPTION 'Failed to complete user setup - inconsistent state';
+  END IF;
 
   RETURN json_build_object('success', true, 'message', 'User created successfully');
+
+EXCEPTION
+  WHEN OTHERS THEN
+    -- Log and return error
+    RETURN json_build_object('success', false, 'error', SQLERRM);
 END;
 $$;
 
