@@ -32,4 +32,11 @@ A React + TypeScript dairy management application built with Vite. This is a ful
 - `VITE_SUPABASE_URL` - Supabase URL
 
 ## Recent Changes
+- January 26, 2026: Fixed admin user creation bug - added ref-based guards to prevent redirect during user creation, fixed session restoration timing
+- January 26, 2026: Created APPLY_FIXES_CRITICAL.sql - simplified SQL script with essential functions for role assignment
 - January 26, 2026: Initial Replit setup - configured Vite to use port 5000 with allowedHosts for proxy compatibility
+
+## Known Issues & Fixes
+### Admin User Creation (REQUIRES DATABASE FIX)
+The frontend fixes are applied, but the database function `admin_create_staff_user` must exist in your Supabase database.
+Run `supabase/APPLY_FIXES_CRITICAL.sql` in Supabase Dashboard > SQL Editor to complete the fix.
