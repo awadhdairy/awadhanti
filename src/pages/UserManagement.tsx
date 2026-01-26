@@ -51,6 +51,8 @@ interface RpcResponse {
 interface PhoneAvailability {
   available: boolean;
   reactivatable?: boolean;
+  orphaned_auth?: boolean;
+  auth_user_id?: string;
   user_id?: string;
   full_name?: string;
   previous_role?: string;
@@ -172,7 +174,25 @@ export default function UserManagement() {
       const availability = await checkPhoneAvailability(phone);
       
       if (!availability.available) {
-        if (availability.reactivatable && availability.user_id) {
+        if (availability.orphaned_auth && availability.auth_user_id) {
+          // Orphaned auth record exists - clean it up first
+          toast.info("Cleaning up orphaned record...");
+          const { data: cleanupData, error: cleanupError } = await (supabase.rpc as Function)('admin_cleanup_orphaned_auth', {
+            _phone: phone,
+          });
+          
+          if (cleanupError) {
+            throw new Error(`Cleanup failed: ${cleanupError.message}`);
+          }
+          
+          const cleanupResult = cleanupData as unknown as RpcResponse;
+          if (!cleanupResult?.success) {
+            throw new Error(cleanupResult?.error || "Failed to cleanup orphaned record");
+          }
+          
+          toast.success("Orphaned record cleaned up, creating user...");
+          // Continue with user creation after cleanup
+        } else if (availability.reactivatable && availability.user_id) {
           // Show reactivation dialog instead
           setReactivationUser({
             id: availability.user_id,
