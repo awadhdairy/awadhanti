@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useNavigate } from "react-router-dom";
@@ -98,6 +98,9 @@ export default function UserManagement() {
   
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
 
+  const isCreatingUserRef = useRef(false);
+  const initialRoleRef = useRef<string | null>(null);
+
   // Reactivation state
   const [reactivationUser, setReactivationUser] = useState<{
     id: string;
@@ -112,7 +115,18 @@ export default function UserManagement() {
   const [selectedRole, setSelectedRole] = useState("");
 
   useEffect(() => {
-    if (!roleLoading && role !== "super_admin") {
+    if (!roleLoading && role) {
+      if (initialRoleRef.current === null) {
+        initialRoleRef.current = role;
+      }
+    }
+  }, [role, roleLoading]);
+
+  useEffect(() => {
+    if (isCreatingUserRef.current) {
+      return;
+    }
+    if (!roleLoading && role !== "super_admin" && initialRoleRef.current !== null) {
       navigate("/dashboard");
       toast.error("Access denied. Super Admin only.");
     }
@@ -169,6 +183,7 @@ export default function UserManagement() {
     }
 
     setCreating(true);
+    isCreatingUserRef.current = true;
     
     // Save admin session tokens at the start
     let adminTokens: { access_token: string; refresh_token: string } | null = null;
@@ -313,6 +328,7 @@ export default function UserManagement() {
       toast.error(message);
     } finally {
       setCreating(false);
+      isCreatingUserRef.current = false;
     }
   };
 
