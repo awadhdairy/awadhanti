@@ -19,6 +19,20 @@ const authSchema = z.object({
 
 type AuthFormData = z.infer<typeof authSchema>;
 
+interface VerifyPinResult {
+  customer_id: string;
+  user_id: string | null;
+  is_approved: boolean;
+}
+
+interface RegisterResult {
+  success: boolean;
+  approved?: boolean;
+  error?: string;
+  customer_id?: string;
+  message?: string;
+}
+
 export default function CustomerAuth() {
   const [loading, setLoading] = useState(false);
   const [pendingApproval, setPendingApproval] = useState(false);
@@ -40,41 +54,85 @@ export default function CustomerAuth() {
     setPendingApproval(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'login', phone: values.phone, pin: values.pin }
+      // Step 1: Verify PIN via database function
+      const { data: verifyData, error: verifyError } = await supabase.rpc('verify_customer_pin', {
+        _phone: values.phone,
+        _pin: values.pin
       });
 
-      if (error) throw error;
+      if (verifyError) throw verifyError;
 
-      if (!data.success) {
-        if (data.pending) {
-          setPendingApproval(true);
-          toast({
-            title: "Account Pending Approval",
-            description: "Your account is awaiting admin approval. Please try again later.",
-            variant: "default",
-          });
-        } else {
-          toast({
-            title: "Login Failed",
-            description: data.error || "Invalid credentials",
-            variant: "destructive",
-          });
-        }
+      // Check if verification returned a result
+      const results = verifyData as VerifyPinResult[] | null;
+      if (!results || results.length === 0) {
+        toast({
+          title: "Login Failed",
+          description: "Invalid phone number or PIN",
+          variant: "destructive",
+        });
         return;
       }
 
-      if (data.session) {
-        await supabase.auth.setSession({
-          access_token: data.session.access_token,
-          refresh_token: data.session.refresh_token
+      const result = results[0];
+      
+      // Check if account is approved
+      if (!result.is_approved) {
+        setPendingApproval(true);
+        toast({
+          title: "Account Pending Approval",
+          description: "Your account is awaiting admin approval. Please try again later.",
+          variant: "default",
         });
+        return;
+      }
+
+      // Step 2: Login via native Supabase Auth
+      const email = `customer_${values.phone}@awadhdairy.com`;
+      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: values.pin,
+      });
+
+      if (authError) {
+        // If auth fails but PIN was valid, try to create auth user
+        console.warn("Auth login failed, attempting to create auth account:", authError.message);
         
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+          email,
+          password: values.pin,
+          options: {
+            data: {
+              is_customer: true,
+              customer_id: result.customer_id,
+              phone: values.phone,
+            },
+          },
+        });
+
+        if (signUpError) {
+          toast({
+            title: "Login Failed",
+            description: "Unable to complete login. Please contact support.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        if (signUpData.session) {
+          toast({
+            title: "Welcome!",
+            description: "Logged in successfully",
+          });
+          navigate('/customer/dashboard');
+          return;
+        }
+      }
+
+      if (authData?.session) {
         toast({
           title: "Welcome!",
           description: "Logged in successfully",
         });
-        
         navigate('/customer/dashboard');
       }
     } catch (error: any) {
@@ -92,22 +150,39 @@ export default function CustomerAuth() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'register', phone: values.phone, pin: values.pin }
+      // Use database function to register customer account
+      const { data, error } = await supabase.rpc('register_customer_account', {
+        _phone: values.phone,
+        _pin: values.pin
       });
 
       if (error) throw error;
 
-      if (!data.success) {
+      const result = data as unknown as RegisterResult;
+      if (!result.success) {
         toast({
           title: "Registration Failed",
-          description: data.error || "Could not create account",
+          description: result.error || "Could not create account",
           variant: "destructive",
         });
         return;
       }
 
-      if (data.approved) {
+      if (result.approved) {
+        // Auto-approved - also create auth user
+        const email = `customer_${values.phone}@awadhdairy.com`;
+        await supabase.auth.signUp({
+          email,
+          password: values.pin,
+          options: {
+            data: {
+              is_customer: true,
+              customer_id: result.customer_id,
+              phone: values.phone,
+            },
+          },
+        });
+
         toast({
           title: "Account Created!",
           description: "Your account has been approved. Please login to continue.",
@@ -156,8 +231,8 @@ export default function CustomerAuth() {
           <CardContent>
             {pendingApproval ? (
               <div className="text-center py-8">
-                <div className="bg-amber-100 dark:bg-amber-900/30 rounded-full p-4 w-fit mx-auto mb-4">
-                  <UserPlus className="h-8 w-8 text-amber-600" />
+                <div className="bg-warning/10 rounded-full p-4 w-fit mx-auto mb-4">
+                  <UserPlus className="h-8 w-8 text-warning" />
                 </div>
                 <h3 className="text-lg font-semibold mb-2">Pending Approval</h3>
                 <p className="text-muted-foreground mb-4">

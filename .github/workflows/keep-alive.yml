@@ -10,11 +10,13 @@ jobs:
   keep-alive:
     runs-on: ubuntu-latest
     steps:
-      - name: Ping Health Check Endpoint
+      - name: Ping Database via PostgREST
         run: |
-          # Ping the health-check edge function to keep the database active
+          # Ping the database directly via PostgREST to keep it active
           response=$(curl -s -w "\n%{http_code}" \
-            "https://eqedibnoatuxczjwkbbx.supabase.co/functions/v1/health-check")
+            -H "apikey: ${{ secrets.SUPABASE_ANON_KEY }}" \
+            -H "Authorization: Bearer ${{ secrets.SUPABASE_ANON_KEY }}" \
+            "https://sgpnlunidlrbfdbegapw.supabase.co/rest/v1/dairy_settings_public?select=dairy_name&limit=1")
           
           http_code=$(echo "$response" | tail -1)
           body=$(echo "$response" | head -n -1)

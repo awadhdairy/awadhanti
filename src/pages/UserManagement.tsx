@@ -29,6 +29,9 @@ import { UserPlus, Users, Shield, Phone, KeyRound, User, RotateCcw, Trash2 } fro
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { sanitizeError } from "@/lib/errors";
 import { Switch } from "@/components/ui/switch";
+import type { Database } from "@/integrations/supabase/types";
+
+type UserRole = Database["public"]["Enums"]["user_role"];
 
 interface UserProfile {
   id: string;
@@ -37,6 +40,12 @@ interface UserProfile {
   role: string;
   is_active: boolean;
   created_at: string;
+}
+
+interface RpcResponse {
+  success: boolean;
+  error?: string;
+  message?: string;
 }
 
 const roleOptions = [
@@ -129,27 +138,43 @@ export default function UserManagement() {
 
     setCreating(true);
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error("Not authenticated");
-        return;
-      }
-
-      const response = await supabase.functions.invoke("create-user", {
-        body: {
-          phone,
-          pin,
-          fullName,
-          role: selectedRole,
+      // Step 1: Create auth user using signUp
+      const email = `${phone}@awadhdairy.com`;
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password: pin,
+        options: {
+          data: {
+            phone,
+            full_name: fullName,
+          },
         },
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || "Failed to create user");
+      if (signUpError) {
+        throw new Error(signUpError.message);
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      if (!signUpData.user) {
+        throw new Error("Failed to create user account");
+      }
+
+      // Step 2: Set up profile and role via RPC
+      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_staff_user', {
+        _user_id: signUpData.user.id,
+        _full_name: fullName,
+        _phone: phone,
+        _role: selectedRole as UserRole,
+        _pin: pin,
+      });
+
+      if (rpcError) {
+        throw new Error(rpcError.message);
+      }
+
+      const result = rpcData as unknown as RpcResponse;
+      if (result && !result.success) {
+        throw new Error(result.error || "Failed to set up user profile");
       }
 
       toast.success("User created successfully");
@@ -173,22 +198,21 @@ export default function UserManagement() {
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
     setTogglingUser(userId);
     try {
-      const response = await supabase.functions.invoke("update-user-status", {
-        body: {
-          userId,
-          isActive: !currentStatus,
-        },
+      const { data, error } = await supabase.rpc('admin_update_user_status', {
+        _target_user_id: userId,
+        _is_active: !currentStatus,
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || "Failed to update status");
+      if (error) {
+        throw new Error(error.message);
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      const result = data as unknown as RpcResponse;
+      if (result && !result.success) {
+        throw new Error(result.error || "Failed to update status");
       }
 
-      toast.success(response.data.message);
+      toast.success(result?.message || `User ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
       fetchUsers();
     } catch (error: any) {
       toast.error(error.message || "Failed to update user status");
@@ -210,22 +234,22 @@ export default function UserManagement() {
 
     setResettingPin(true);
     try {
-      const response = await supabase.functions.invoke("reset-user-pin", {
-        body: {
-          userId: selectedUser.id,
-          newPin,
-        },
+      // Reset PIN via database function
+      const { data, error } = await supabase.rpc('admin_reset_user_pin', {
+        _target_user_id: selectedUser.id,
+        _new_pin: newPin,
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || "Failed to reset PIN");
+      if (error) {
+        throw new Error(error.message);
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      const result = data as unknown as RpcResponse;
+      if (result && !result.success) {
+        throw new Error(result.error || "Failed to reset PIN");
       }
 
-      toast.success(response.data.message);
+      toast.success(result?.message || "PIN reset successfully");
       setResetPinDialogOpen(false);
       setSelectedUser(null);
       setNewPin("");
@@ -252,19 +276,20 @@ export default function UserManagement() {
 
     setDeleting(true);
     try {
-      const response = await supabase.functions.invoke("delete-user", {
-        body: { userId: selectedUser.id },
+      const { data, error } = await supabase.rpc('admin_delete_user', {
+        _target_user_id: selectedUser.id,
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || "Failed to delete user");
+      if (error) {
+        throw new Error(error.message);
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      const result = data as unknown as RpcResponse;
+      if (result && !result.success) {
+        throw new Error(result.error || "Failed to delete user");
       }
 
-      toast.success(response.data.message);
+      toast.success(result?.message || "User deleted successfully");
       setDeleteDialogOpen(false);
       setSelectedUser(null);
       fetchUsers();
@@ -501,9 +526,6 @@ export default function UserManagement() {
                 onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 maxLength={6}
               />
-              <p className="text-xs text-muted-foreground">
-                PIN must be exactly 6 digits
-              </p>
             </div>
           </div>
 
@@ -525,17 +547,16 @@ export default function UserManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete User Confirmation Dialog */}
+      {/* Delete User Confirmation */}
       <ConfirmDialog
         open={deleteDialogOpen}
         onOpenChange={setDeleteDialogOpen}
-        title="Delete User Permanently"
-        description={`Are you sure you want to permanently delete "${selectedUser?.full_name}"? This action cannot be undone and will remove all associated data including their profile and login access.`}
-        confirmText={deleting ? "Deleting..." : "Delete Permanently"}
+        title="Delete User"
+        description={`Are you sure you want to delete ${selectedUser?.full_name}? This action cannot be undone.`}
+        confirmText={deleting ? "Deleting..." : "Delete"}
         onConfirm={handleDeleteUser}
         variant="destructive"
       />
-
     </div>
   );
 }
