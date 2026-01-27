@@ -22,14 +22,28 @@ function getSafeRedirectUrl(origin: string | null, path: string): string {
   return path;
 }
 
+function getCorsOrigin(origin: string | null): string {
+  if (origin && isValidOrigin(origin)) {
+    return origin;
+  }
+  return ALLOWED_ORIGINS[0];
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const origin = req.headers.origin as string | null;
+  const corsOrigin = getCorsOrigin(origin);
+  
   if (req.method === 'OPTIONS') {
     return res.status(200)
-      .setHeader('Access-Control-Allow-Origin', '*')
+      .setHeader('Access-Control-Allow-Origin', corsOrigin)
       .setHeader('Access-Control-Allow-Headers', 'authorization, x-client-info, apikey, content-type, x-supabase-api-version')
       .setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS')
+      .setHeader('Access-Control-Allow-Credentials', 'true')
       .end();
   }
+  
+  res.setHeader('Access-Control-Allow-Origin', corsOrigin);
+  res.setHeader('Access-Control-Allow-Credentials', 'true');
 
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' });
