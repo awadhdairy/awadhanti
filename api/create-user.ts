@@ -62,15 +62,36 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     
     console.log('Authenticated user:', requestingUser.id);
 
-    const { data: roleData, error: roleError } = await supabaseAdmin
-      .from('user_roles')
+    // Check role from profiles table first (primary source used by frontend)
+    const { data: profileData, error: profileError } = await supabaseAdmin
+      .from('profiles')
       .select('role')
-      .eq('user_id', requestingUser.id)
+      .eq('id', requestingUser.id)
       .single();
 
-    if (roleError || roleData?.role !== 'super_admin') {
+    console.log('Profile lookup result:', { profileData, profileError });
+
+    let userRole = profileData?.role;
+
+    // Fallback to user_roles table if profiles doesn't have the role
+    if (!userRole) {
+      console.log('No role in profiles, checking user_roles table...');
+      const { data: roleData, error: roleError } = await supabaseAdmin
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', requestingUser.id)
+        .single();
+      
+      console.log('user_roles lookup result:', { roleData, roleError });
+      userRole = roleData?.role;
+    }
+
+    if (userRole !== 'super_admin') {
+      console.error('Role check failed:', { userRole, userId: requestingUser.id });
       return res.status(403).json({ error: 'Only super admin can create users' });
     }
+
+    console.log('Role verified as super_admin');
 
     const { phone, pin, fullName, role } = req.body;
 
