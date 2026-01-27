@@ -67,15 +67,18 @@ export default function Auth() {
     setBootstrapping(true);
 
     try {
-      // Server-side validation against secure environment variables
-      const response = await supabase.functions.invoke('bootstrap-admin', {
-        body: { phone: cleanPhone, pin }
+      const response = await fetch('/api/bootstrap-admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: cleanPhone, pin })
       });
 
-      if (response.error) {
+      const data = await response.json();
+
+      if (!response.ok || data.error) {
         toast({
           title: "Bootstrap failed",
-          description: response.error.message || "Could not create admin account.",
+          description: data.error || "Could not create admin account.",
           variant: "destructive",
         });
         setBootstrapping(false);
@@ -87,7 +90,6 @@ export default function Auth() {
         description: "You can now sign in with your credentials.",
       });
 
-      // Now try to login
       setBootstrapping(false);
       await handleLogin();
     } catch (err) {

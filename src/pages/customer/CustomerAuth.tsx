@@ -40,11 +40,15 @@ export default function CustomerAuth() {
     setPendingApproval(false);
 
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'login', phone: values.phone, pin: values.pin }
+      const response = await fetch('/api/customer-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', phone: values.phone, pin: values.pin })
       });
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok && !data.success) throw new Error(data.error || 'Login failed');
 
       if (!data.success) {
         if (data.pending) {
@@ -92,11 +96,15 @@ export default function CustomerAuth() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'register', phone: values.phone, pin: values.pin }
+      const response = await fetch('/api/customer-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', phone: values.phone, pin: values.pin })
       });
 
-      if (error) throw error;
+      const data = await response.json();
+
+      if (!response.ok && !data.success) throw new Error(data.error || 'Registration failed');
 
       if (!data.success) {
         toast({

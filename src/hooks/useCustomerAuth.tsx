@@ -95,12 +95,16 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
 
   const login = async (phone: string, pin: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'login', phone, pin }
+      const response = await fetch('/api/customer-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'login', phone, pin })
       });
 
-      if (error) {
-        return { success: false, error: error.message };
+      const data = await response.json();
+
+      if (!response.ok && !data.success) {
+        return { success: false, error: data.error, pending: data.pending };
       }
 
       if (!data.success) {
@@ -123,12 +127,16 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
 
   const register = async (phone: string, pin: string) => {
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'register', phone, pin }
+      const response = await fetch('/api/customer-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'register', phone, pin })
       });
 
-      if (error) {
-        return { success: false, error: error.message };
+      const data = await response.json();
+
+      if (!response.ok && !data.success) {
+        return { success: false, error: data.error };
       }
 
       if (!data.success) {
@@ -155,12 +163,16 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      const { data, error } = await supabase.functions.invoke('customer-auth', {
-        body: { action: 'change-pin', customerId, currentPin, newPin }
+      const response = await fetch('/api/customer-auth', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'change-pin', customerId, currentPin, newPin })
       });
 
-      if (error) {
-        return { success: false, error: error.message };
+      const data = await response.json();
+
+      if (!response.ok && !data.success) {
+        return { success: false, error: data.error };
       }
 
       return data;
