@@ -183,6 +183,16 @@ export function AppSidebar({ onLogout }: AppSidebarProps) {
               <Skeleton key={i} className="h-10 w-full" />
             ))}
           </div>
+        ) : !role ? (
+          <div className="px-3 py-4 text-center">
+            <Shield className="mx-auto h-8 w-8 text-sidebar-foreground/40 mb-2" />
+            <p className="text-sm text-sidebar-foreground/70 mb-1">
+              Role not assigned
+            </p>
+            <p className="text-xs text-sidebar-foreground/50">
+              Contact your administrator
+            </p>
+          </div>
         ) : (
           <>
             <nav className="flex flex-col gap-1">

@@ -23,34 +23,49 @@ export function useUserRole(): UserRoleData {
         const { data: { user } } = await supabase.auth.getUser();
         
         if (!user) {
+          console.log("[useUserRole] No authenticated user found");
           setLoading(false);
           return;
         }
 
-        // Fetch role from user_roles table
-        const { data: roleData, error: roleError } = await supabase
-          .from("user_roles")
-          .select("role")
-          .eq("user_id", user.id)
-          .maybeSingle();
+        console.log("[useUserRole] Fetching role for user:", user.id);
 
-        if (roleError) {
-          setError(roleError.message);
-          setLoading(false);
-          return;
-        }
-
-        // Fetch user name from profiles_safe view (excludes pin_hash)
-        const { data: profileData } = await supabase
+        // Use profiles_safe view which has proper RLS policies configured
+        // This view is SECURITY DEFINER and bypasses RLS restrictions
+        const { data: profileData, error: profileError } = await supabase
           .from("profiles_safe")
-          .select("full_name")
+          .select("role, full_name")
           .eq("id", user.id)
           .maybeSingle();
 
-        setRole(roleData?.role || null);
-        setUserName(profileData?.full_name || null);
+        if (profileError) {
+          console.error("[useUserRole] Error fetching from profiles_safe:", profileError);
+        }
+
+        let fetchedRole: UserRole | null = profileData?.role || null;
+        let fetchedName: string | null = profileData?.full_name || null;
+
+        console.log("[useUserRole] profiles_safe result - role:", fetchedRole, "name:", fetchedName);
+
+        // Fallback: check user metadata from auth if profiles_safe didn't return a role
+        if (!fetchedRole && user.user_metadata?.role) {
+          fetchedRole = user.user_metadata.role as UserRole;
+          console.log("[useUserRole] Using role from user metadata:", fetchedRole);
+        }
+
+        // Fallback for name from user metadata
+        if (!fetchedName && user.user_metadata?.full_name) {
+          fetchedName = user.user_metadata.full_name as string;
+        }
+
+        console.log("[useUserRole] Final role:", fetchedRole, "userName:", fetchedName);
+
+        setRole(fetchedRole);
+        setUserName(fetchedName);
+        setError(fetchedRole ? null : "Could not determine user role. Please contact administrator.");
         setLoading(false);
       } catch (err) {
+        console.error("[useUserRole] Unexpected error:", err);
         setError("Failed to fetch user role");
         setLoading(false);
       }
@@ -59,7 +74,8 @@ export function useUserRole(): UserRoleData {
     fetchUserRole();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
+      console.log("[useUserRole] Auth state changed:", event);
       fetchUserRole();
     });
 
