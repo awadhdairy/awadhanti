@@ -135,21 +135,28 @@ export default function UserManagement() {
         return;
       }
 
-      const response = await supabase.functions.invoke("create-user", {
-        body: {
+      const response = await fetch("/api/create-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({
           phone,
           pin,
           fullName,
           role: selectedRole,
-        },
+        }),
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || "Failed to create user");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to create user");
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      if (data.error) {
+        throw new Error(data.error);
       }
 
       toast.success("User created successfully");
@@ -242,19 +249,32 @@ export default function UserManagement() {
 
     setDeleting(true);
     try {
-      const response = await supabase.functions.invoke("delete-user", {
-        body: { userId: selectedUser.id },
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Not authenticated");
+        return;
+      }
+
+      const response = await fetch("/api/delete-user", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ userId: selectedUser.id }),
       });
 
-      if (response.error) {
-        throw new Error(response.error.message || "Failed to delete user");
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || "Failed to delete user");
       }
 
-      if (response.data?.error) {
-        throw new Error(response.data.error);
+      if (data.error) {
+        throw new Error(data.error);
       }
 
-      toast.success(response.data.message);
+      toast.success(data.message);
       setDeleteDialogOpen(false);
       setSelectedUser(null);
       fetchUsers();
