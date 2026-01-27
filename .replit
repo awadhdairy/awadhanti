@@ -1,0 +1,46 @@
+modules = ["nodejs-20", "web"]
+[agent]
+expertMode = true
+
+[nix]
+channel = "stable-25_05"
+
+[workflows]
+runButton = "Project"
+
+[[workflows.workflow]]
+name = "Project"
+mode = "parallel"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Frontend"
+
+[[workflows.workflow]]
+name = "Frontend"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "npm run dev"
+waitForPort = 5000
+
+[workflows.workflow.metadata]
+outputType = "webview"
+
+[[ports]]
+localPort = 5000
+externalPort = 80
+
+[userenv]
+
+[userenv.shared]
+VITE_SUPABASE_PROJECT_ID = "enkhwgemkmwjinyexyqe"
+VITE_SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVua2h3Z2Vta213amlueWV4eXFlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njk0NzcwNTAsImV4cCI6MjA4NTA1MzA1MH0.dFM8dZ4fsBV7Gp5zF3QuawIIgKwi2UGWfPc4-Uoq878"
+VITE_SUPABASE_URL = "https://enkhwgemkmwjinyexyqe.supabase.co"
+
+[deployment]
+deploymentTarget = "static"
+build = ["npm", "run", "build"]
+publicDir = "dist"
