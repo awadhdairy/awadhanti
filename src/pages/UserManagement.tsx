@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useNavigate } from "react-router-dom";
@@ -25,13 +25,10 @@ import {
 } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { UserPlus, Users, Shield, Phone, KeyRound, User, RotateCcw, Trash2, RefreshCw, AlertTriangle } from "lucide-react";
+import { UserPlus, Users, Shield, Phone, KeyRound, User, RotateCcw, Trash2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { sanitizeError } from "@/lib/errors";
 import { Switch } from "@/components/ui/switch";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import type { Database } from "@/integrations/supabase/types";
-
-type UserRole = Database["public"]["Enums"]["user_role"];
 
 interface UserProfile {
   id: string;
@@ -40,23 +37,6 @@ interface UserProfile {
   role: string;
   is_active: boolean;
   created_at: string;
-}
-
-interface RpcResponse {
-  success: boolean;
-  error?: string;
-  message?: string;
-}
-
-interface PhoneAvailability {
-  available: boolean;
-  reactivatable?: boolean;
-  orphaned_auth?: boolean;
-  auth_user_id?: string;
-  user_id?: string;
-  full_name?: string;
-  previous_role?: string;
-  error?: string;
 }
 
 const roleOptions = [
@@ -86,27 +66,14 @@ export default function UserManagement() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [resetPinDialogOpen, setResetPinDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [reactivateDialogOpen, setReactivateDialogOpen] = useState(false);
   
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [newPin, setNewPin] = useState("");
   const [creating, setCreating] = useState(false);
   const [resettingPin, setResettingPin] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [reactivating, setReactivating] = useState(false);
-  const [deleteType, setDeleteType] = useState<"soft" | "permanent">("soft");
   
   const [togglingUser, setTogglingUser] = useState<string | null>(null);
-
-  const isCreatingUserRef = useRef(false);
-  const initialRoleRef = useRef<string | null>(null);
-
-  // Reactivation state
-  const [reactivationUser, setReactivationUser] = useState<{
-    id: string;
-    name: string;
-    previousRole?: string;
-  } | null>(null);
 
   // Form state
   const [fullName, setFullName] = useState("");
@@ -115,18 +82,7 @@ export default function UserManagement() {
   const [selectedRole, setSelectedRole] = useState("");
 
   useEffect(() => {
-    if (!roleLoading && role) {
-      if (initialRoleRef.current === null) {
-        initialRoleRef.current = role;
-      }
-    }
-  }, [role, roleLoading]);
-
-  useEffect(() => {
-    if (isCreatingUserRef.current) {
-      return;
-    }
-    if (!roleLoading && role !== "super_admin" && initialRoleRef.current !== null) {
+    if (!roleLoading && role !== "super_admin") {
       navigate("/dashboard");
       toast.error("Access denied. Super Admin only.");
     }
@@ -140,6 +96,7 @@ export default function UserManagement() {
 
   const fetchUsers = async () => {
     try {
+      // Use profiles_safe view to exclude pin_hash column
       const { data, error } = await supabase
         .from("profiles_safe")
         .select("id, full_name, phone, role, is_active, created_at")
@@ -147,23 +104,11 @@ export default function UserManagement() {
 
       if (error) throw error;
       setUsers(data || []);
-    } catch (error: unknown) {
+    } catch (error: any) {
       toast.error(sanitizeError(error));
     } finally {
       setLoading(false);
     }
-  };
-
-  const checkPhoneAvailability = async (phoneNumber: string): Promise<PhoneAvailability> => {
-    const { data, error } = await supabase.rpc('check_phone_availability', {
-      _phone: phoneNumber,
-    });
-    
-    if (error) {
-      throw new Error(error.message);
-    }
-    
-    return data as unknown as PhoneAvailability;
   };
 
   const handleCreateUser = async () => {
@@ -183,194 +128,38 @@ export default function UserManagement() {
     }
 
     setCreating(true);
-    isCreatingUserRef.current = true;
-    
-    // Save admin session tokens at the start
-    let adminTokens: { access_token: string; refresh_token: string } | null = null;
-    let sessionRestored = false;
-    
-    const restoreAdminSession = async () => {
-      if (sessionRestored || !adminTokens) return true;
-      
-      try {
-        const { error: restoreError } = await supabase.auth.setSession({
-          access_token: adminTokens.access_token,
-          refresh_token: adminTokens.refresh_token,
-        });
-        
-        if (restoreError) {
-          console.error("Failed to restore admin session:", restoreError);
-          toast.error("Session error. Please log in again.");
-          navigate("/auth");
-          return false;
-        }
-        sessionRestored = true;
-        return true;
-      } catch (err) {
-        console.error("Session restore exception:", err);
-        toast.error("Session error. Please log in again.");
-        navigate("/auth");
-        return false;
-      }
-    };
-
     try {
-      // First check if phone is available or reactivatable
-      const availability = await checkPhoneAvailability(phone);
-      
-      if (!availability.available) {
-        if (availability.orphaned_auth && availability.auth_user_id) {
-          toast.info("Cleaning up orphaned record...");
-          const { data: cleanupData, error: cleanupError } = await (supabase.rpc as Function)('admin_cleanup_orphaned_auth', {
-            _phone: phone,
-          });
-          
-          if (cleanupError) {
-            throw new Error(`Cleanup failed: ${cleanupError.message}`);
-          }
-          
-          const cleanupResult = cleanupData as unknown as RpcResponse;
-          if (!cleanupResult?.success) {
-            throw new Error(cleanupResult?.error || "Failed to cleanup orphaned record");
-          }
-          
-          toast.success("Orphaned record cleaned up, creating user...");
-        } else if (availability.reactivatable && availability.user_id) {
-          setReactivationUser({
-            id: availability.user_id,
-            name: availability.full_name || "Unknown",
-            previousRole: availability.previous_role,
-          });
-          setDialogOpen(false);
-          setReactivateDialogOpen(true);
-          setCreating(false);
-          return;
-        } else {
-          throw new Error(availability.error || "Phone number already in use");
-        }
-      }
-
-      // Step 1: Save current admin session
-      const { data: currentSession } = await supabase.auth.getSession();
-      if (!currentSession.session) {
-        throw new Error("Admin session not found. Please log in again.");
-      }
-      adminTokens = {
-        access_token: currentSession.session.access_token,
-        refresh_token: currentSession.session.refresh_token,
-      };
-
-      // Step 2: Create auth user (this switches session to new user)
-      const email = `${phone}@awadhdairy.com`;
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password: pin,
-        options: {
-          data: {
-            phone,
-            full_name: fullName,
-          },
-        },
-      });
-
-      // Step 3: IMMEDIATELY restore admin session before ANY other operations
-      const restored = await restoreAdminSession();
-      if (!restored) {
-        setCreating(false);
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        toast.error("Not authenticated");
         return;
       }
 
-      // Now check signUp result
-      if (signUpError) {
-        throw new Error(signUpError.message);
-      }
-
-      if (!signUpData?.user) {
-        throw new Error("Failed to create user account");
-      }
-
-      const newUserId = signUpData.user.id;
-
-      // Step 4: Set up profile and role via RPC (running as admin)
-      const { data: rpcData, error: rpcError } = await supabase.rpc('admin_create_staff_user', {
-        _user_id: newUserId,
-        _full_name: fullName,
-        _phone: phone,
-        _role: selectedRole as UserRole,
-        _pin: pin,
+      const response = await supabase.functions.invoke("create-user", {
+        body: {
+          phone,
+          pin,
+          fullName,
+          role: selectedRole,
+        },
       });
 
-      // Check for RPC errors - this is critical
-      if (rpcError) {
-        console.error("RPC Error:", rpcError);
-        throw new Error(`Failed to set user role: ${rpcError.message}`);
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to create user");
       }
 
-      const result = rpcData as unknown as RpcResponse;
-      if (!result) {
-        throw new Error("No response from server. Please check if the database function exists.");
-      }
-      
-      if (!result.success) {
-        throw new Error(result.error || "Failed to set up user profile");
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
-      toast.success("User created successfully with role: " + selectedRole);
+      toast.success("User created successfully");
       setDialogOpen(false);
       resetForm();
       fetchUsers();
-    } catch (error: unknown) {
-      // Ensure admin session is restored even on error
-      await restoreAdminSession();
-      
-      const message = error instanceof Error ? error.message : "Failed to create user";
-      console.error("Create user error:", error);
-      toast.error(message);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to create user");
     } finally {
       setCreating(false);
-      isCreatingUserRef.current = false;
-    }
-  };
-
-  const handleReactivateUser = async () => {
-    if (!reactivationUser || !fullName || !pin || !selectedRole) {
-      toast.error("Please fill in all fields");
-      return;
-    }
-
-    if (!/^\d{6}$/.test(pin)) {
-      toast.error("PIN must be 6 digits");
-      return;
-    }
-
-    setReactivating(true);
-    try {
-      const { data, error } = await supabase.rpc('admin_reactivate_user', {
-        _user_id: reactivationUser.id,
-        _full_name: fullName,
-        _role: selectedRole as UserRole,
-        _pin: pin,
-      });
-
-      if (error) {
-        throw new Error(error.message);
-      }
-
-      const result = data as unknown as RpcResponse;
-      if (result && !result.success) {
-        throw new Error(result.error || "Failed to reactivate user");
-      }
-
-      toast.success(result?.message || "User reactivated successfully");
-      setReactivateDialogOpen(false);
-      setReactivationUser(null);
-      resetForm();
-      fetchUsers();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to reactivate user";
-      toast.error(message);
-    } finally {
-      setReactivating(false);
     }
   };
 
@@ -384,25 +173,25 @@ export default function UserManagement() {
   const handleToggleStatus = async (userId: string, currentStatus: boolean) => {
     setTogglingUser(userId);
     try {
-      const { data, error } = await supabase.rpc('admin_update_user_status', {
-        _target_user_id: userId,
-        _is_active: !currentStatus,
+      const response = await supabase.functions.invoke("update-user-status", {
+        body: {
+          userId,
+          isActive: !currentStatus,
+        },
       });
 
-      if (error) {
-        throw new Error(error.message);
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to update status");
       }
 
-      const result = data as unknown as RpcResponse;
-      if (result && !result.success) {
-        throw new Error(result.error || "Failed to update status");
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
-      toast.success(result?.message || `User ${!currentStatus ? 'activated' : 'deactivated'} successfully`);
+      toast.success(response.data.message);
       fetchUsers();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to update user status";
-      toast.error(message);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update user status");
     } finally {
       setTogglingUser(null);
     }
@@ -421,27 +210,27 @@ export default function UserManagement() {
 
     setResettingPin(true);
     try {
-      const { data, error } = await supabase.rpc('admin_reset_user_pin', {
-        _target_user_id: selectedUser.id,
-        _new_pin: newPin,
+      const response = await supabase.functions.invoke("reset-user-pin", {
+        body: {
+          userId: selectedUser.id,
+          newPin,
+        },
       });
 
-      if (error) {
-        throw new Error(error.message);
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to reset PIN");
       }
 
-      const result = data as unknown as RpcResponse;
-      if (result && !result.success) {
-        throw new Error(result.error || "Failed to reset PIN");
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
-      toast.success(result?.message || "PIN reset successfully");
+      toast.success(response.data.message);
       setResetPinDialogOpen(false);
       setSelectedUser(null);
       setNewPin("");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to reset PIN";
-      toast.error(message);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to reset PIN");
     } finally {
       setResettingPin(false);
     }
@@ -455,7 +244,6 @@ export default function UserManagement() {
 
   const openDeleteDialog = (user: UserProfile) => {
     setSelectedUser(user);
-    setDeleteType("soft");
     setDeleteDialogOpen(true);
   };
 
@@ -464,52 +252,29 @@ export default function UserManagement() {
 
     setDeleting(true);
     try {
-      if (deleteType === "permanent") {
-        // Call database function for permanent deletion from auth.users
-        // Note: RPC name not in types yet - will be after SQL migration is run
-        const { data, error } = await (supabase.rpc as Function)('admin_permanent_delete_user', {
-          _target_user_id: selectedUser.id
-        });
-        
-        if (error) {
-          throw new Error(error.message);
-        }
-        
-        const result = data as unknown as RpcResponse;
-        if (!result?.success) {
-          throw new Error(result?.error || "Failed to permanently delete user");
-        }
-        
-        toast.success("User permanently deleted");
-      } else {
-        // Soft delete via RPC
-        const { data, error } = await supabase.rpc('admin_delete_user', {
-          _target_user_id: selectedUser.id,
-          _permanent: false,
-        });
+      const response = await supabase.functions.invoke("delete-user", {
+        body: { userId: selectedUser.id },
+      });
 
-        if (error) {
-          throw new Error(error.message);
-        }
-
-        const result = data as unknown as RpcResponse;
-        if (result && !result.success) {
-          throw new Error(result.error || "Failed to delete user");
-        }
-
-        toast.success(result?.message || "User deactivated successfully");
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to delete user");
       }
 
+      if (response.data?.error) {
+        throw new Error(response.data.error);
+      }
+
+      toast.success(response.data.message);
       setDeleteDialogOpen(false);
       setSelectedUser(null);
       fetchUsers();
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : "Failed to delete user";
-      toast.error(message);
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete user");
     } finally {
       setDeleting(false);
     }
   };
+
 
   const columns = [
     {
@@ -736,6 +501,9 @@ export default function UserManagement() {
                 onChange={(e) => setNewPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 maxLength={6}
               />
+              <p className="text-xs text-muted-foreground">
+                PIN must be exactly 6 digits
+              </p>
             </div>
           </div>
 
@@ -757,160 +525,17 @@ export default function UserManagement() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete User Dialog with Options */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2 text-destructive">
-              <Trash2 className="h-5 w-5" />
-              Delete User
-            </DialogTitle>
-            <DialogDescription>
-              Choose how to remove {selectedUser?.full_name} from the system.
-            </DialogDescription>
-          </DialogHeader>
+      {/* Delete User Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete User Permanently"
+        description={`Are you sure you want to permanently delete "${selectedUser?.full_name}"? This action cannot be undone and will remove all associated data including their profile and login access.`}
+        confirmText={deleting ? "Deleting..." : "Delete Permanently"}
+        onConfirm={handleDeleteUser}
+        variant="destructive"
+      />
 
-          <div className="space-y-4 py-4">
-            <RadioGroup value={deleteType} onValueChange={(v) => setDeleteType(v as "soft" | "permanent")}>
-              <div className="flex items-start space-x-3 p-3 rounded-lg border">
-                <RadioGroupItem value="soft" id="soft" className="mt-1" />
-                <div className="space-y-1">
-                  <Label htmlFor="soft" className="font-medium cursor-pointer">
-                    Deactivate (Recommended)
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    User cannot log in but can be reactivated later. Data is preserved.
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-start space-x-3 p-3 rounded-lg border border-destructive/30 bg-destructive/5">
-                <RadioGroupItem value="permanent" id="permanent" className="mt-1" />
-                <div className="space-y-1">
-                  <Label htmlFor="permanent" className="font-medium cursor-pointer flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                    Permanent Delete
-                  </Label>
-                  <p className="text-sm text-muted-foreground">
-                    Completely removes user from the system. This action cannot be undone.
-                    Phone number can be reused for a new account.
-                  </p>
-                </div>
-              </div>
-            </RadioGroup>
-          </div>
-
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDeleteDialogOpen(false);
-                setSelectedUser(null);
-              }}
-            >
-              Cancel
-            </Button>
-            <Button 
-              variant="destructive" 
-              onClick={handleDeleteUser} 
-              disabled={deleting}
-            >
-              {deleting ? "Deleting..." : deleteType === "permanent" ? "Permanently Delete" : "Deactivate"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Reactivate User Dialog */}
-      <Dialog open={reactivateDialogOpen} onOpenChange={setReactivateDialogOpen}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <RefreshCw className="h-5 w-5" />
-              Reactivate Existing User
-            </DialogTitle>
-            <DialogDescription>
-              A user with this phone number was previously deactivated. 
-              Would you like to reactivate them instead?
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="rounded-lg border bg-muted/50 p-4 mb-4">
-            <p className="text-sm">
-              <strong>Previous Name:</strong> {reactivationUser?.name}
-            </p>
-            {reactivationUser?.previousRole && (
-              <p className="text-sm">
-                <strong>Previous Role:</strong> {reactivationUser.previousRole.replace("_", " ").replace(/\b\w/g, (l) => l.toUpperCase())}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="reactivateName" className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Full Name
-              </Label>
-              <Input
-                id="reactivateName"
-                placeholder="Enter full name"
-                value={fullName}
-                onChange={(e) => setFullName(e.target.value)}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reactivatePin" className="flex items-center gap-2">
-                <KeyRound className="h-4 w-4" />
-                New 6-Digit PIN
-              </Label>
-              <Input
-                id="reactivatePin"
-                type="password"
-                placeholder="6-digit PIN for login"
-                value={pin}
-                onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 6))}
-                maxLength={6}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="reactivateRole" className="flex items-center gap-2">
-                <Shield className="h-4 w-4" />
-                Role
-              </Label>
-              <Select value={selectedRole} onValueChange={setSelectedRole}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a role" />
-                </SelectTrigger>
-                <SelectContent>
-                  {roleOptions.map((role) => (
-                    <SelectItem key={role.value} value={role.value}>
-                      {role.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <DialogFooter className="mt-4">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setReactivateDialogOpen(false);
-                setReactivationUser(null);
-                resetForm();
-              }}
-            >
-              Cancel
-            </Button>
-            <Button onClick={handleReactivateUser} disabled={reactivating}>
-              {reactivating ? "Reactivating..." : "Reactivate User"}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   );
 }

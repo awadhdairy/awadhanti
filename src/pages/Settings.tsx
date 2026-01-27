@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Settings as SettingsIcon, Building2, User, Bell, Loader2, Save, KeyRound } from "lucide-react";
+import { Settings as SettingsIcon, Building2, User, Bell, Shield, Loader2, Save, KeyRound } from "lucide-react";
 
 interface DairySettings {
   id: string;
@@ -26,12 +26,6 @@ interface Profile {
   full_name: string;
   phone: string | null;
   role: string;
-}
-
-interface RpcResponse {
-  success: boolean;
-  error?: string;
-  message?: string;
 }
 
 export default function SettingsPage() {
@@ -194,29 +188,19 @@ export default function SettingsPage() {
 
     setChangingPin(true);
     try {
-      // Use database function to change PIN
-      const { data, error } = await supabase.rpc('change_own_pin', {
-        _current_pin: currentPin,
-        _new_pin: newPin,
+      const response = await supabase.functions.invoke("change-pin", {
+        body: {
+          currentPin,
+          newPin,
+        },
       });
 
-      if (error) {
-        throw new Error(error.message);
+      if (response.error) {
+        throw new Error(response.error.message || "Failed to change PIN");
       }
 
-      const result = data as unknown as RpcResponse;
-      if (result && !result.success) {
-        throw new Error(result.error || "Failed to change PIN");
-      }
-
-      // Also update Supabase Auth password for consistency
-      const { error: authError } = await supabase.auth.updateUser({
-        password: newPin,
-      });
-
-      if (authError) {
-        console.warn("Auth password update failed (non-critical):", authError.message);
-        // Don't throw - PIN hash is the primary auth method
+      if (response.data?.error) {
+        throw new Error(response.data.error);
       }
 
       toast({
@@ -516,7 +500,7 @@ export default function SettingsPage() {
                 <Bell className="h-12 w-12 text-muted-foreground mb-4" />
                 <h3 className="text-lg font-medium">Coming Soon</h3>
                 <p className="text-muted-foreground max-w-sm">
-                  Notification settings will be available in a future update
+                  SMS and WhatsApp notification settings will be available in a future update
                 </p>
               </div>
             </CardContent>

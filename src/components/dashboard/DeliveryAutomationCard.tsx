@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAutoDeliveryScheduler } from "@/hooks/useAutoDeliveryScheduler";
 import { supabase } from "@/integrations/supabase/client";
-import { format } from "date-fns";
+import { format, addDays } from "date-fns";
 import { 
   Truck, 
   Calendar, 
@@ -18,15 +18,6 @@ import {
   RefreshCw,
   Clock
 } from "lucide-react";
-
-interface AutoDeliveryResult {
-  success: boolean;
-  date: string;
-  scheduled: number;
-  delivered: number;
-  skipped: number;
-  errors: string[];
-}
 
 export function DeliveryAutomationCard() {
   const [loading, setLoading] = useState(false);
@@ -46,15 +37,17 @@ export function DeliveryAutomationCard() {
 
   const today = format(new Date(), "yyyy-MM-dd");
 
-  // Trigger the auto-delivery via database function
+  // Trigger the edge function manually
   const handleTriggerCronJob = async () => {
     setCronLoading(true);
     try {
-      const { data, error } = await supabase.rpc('run_auto_delivery');
+      const { data, error } = await supabase.functions.invoke("auto-deliver-daily", {
+        body: { triggered_at: new Date().toISOString(), manual: true },
+      });
 
       if (error) throw error;
 
-      const result = data as unknown as AutoDeliveryResult;
+      const result = data?.result;
       if (result) {
         toast({
           title: "Auto-delivery complete",

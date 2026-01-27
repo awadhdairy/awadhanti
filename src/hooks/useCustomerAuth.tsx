@@ -28,26 +28,6 @@ interface CustomerData {
   billing_cycle: string | null;
 }
 
-interface VerifyPinResult {
-  customer_id: string;
-  user_id: string | null;
-  is_approved: boolean;
-}
-
-interface RegisterResult {
-  success: boolean;
-  approved?: boolean;
-  error?: string;
-  customer_id?: string;
-  message?: string;
-}
-
-interface ChangePinResult {
-  success: boolean;
-  error?: string;
-  message?: string;
-}
-
 const CustomerAuthContext = createContext<CustomerAuthContext | undefined>(undefined);
 
 export function CustomerAuthProvider({ children }: { children: React.ReactNode }) {
@@ -115,67 +95,24 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
 
   const login = async (phone: string, pin: string) => {
     try {
-      // Step 1: Verify PIN via database function
-      const { data: verifyData, error: verifyError } = await supabase.rpc('verify_customer_pin', {
-        _phone: phone,
-        _pin: pin
+      const { data, error } = await supabase.functions.invoke('customer-auth', {
+        body: { action: 'login', phone, pin }
       });
 
-      if (verifyError) {
-        return { success: false, error: verifyError.message };
+      if (error) {
+        return { success: false, error: error.message };
       }
 
-      // Check if verification returned a result
-      const results = verifyData as VerifyPinResult[] | null;
-      if (!results || results.length === 0) {
-        return { success: false, error: 'Invalid phone number or PIN' };
+      if (!data.success) {
+        return { success: false, error: data.error, pending: data.pending };
       }
 
-      const result = results[0];
-      
-      // Check if account is approved
-      if (!result.is_approved) {
-        return { success: false, error: 'Account pending approval', pending: true };
-      }
-
-      // Step 2: Login via native Supabase Auth
-      const email = `customer_${phone}@awadhdairy.com`;
-      const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
-        email,
-        password: pin,
-      });
-
-      if (authError) {
-        // If auth fails but PIN was valid, the auth user might not exist
-        // This can happen if the customer was created before auth integration
-        console.warn("Auth login failed, customer may need auth account created:", authError.message);
-        
-        // Try to create the auth user and log in
-        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-          email,
-          password: pin,
-          options: {
-            data: {
-              is_customer: true,
-              customer_id: result.customer_id,
-              phone,
-            },
-          },
+      if (data.session) {
+        await supabase.auth.setSession({
+          access_token: data.session.access_token,
+          refresh_token: data.session.refresh_token
         });
-
-        if (signUpError) {
-          return { success: false, error: 'Login failed. Please contact support.' };
-        }
-
-        // If sign up succeeded, we should be logged in
-        if (signUpData.session) {
-          setCustomerId(result.customer_id);
-          return { success: true };
-        }
-      }
-
-      if (authData?.session) {
-        setCustomerId(result.customer_id);
+        setCustomerId(data.customer_id);
       }
 
       return { success: true };
@@ -186,38 +123,19 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
 
   const register = async (phone: string, pin: string) => {
     try {
-      // Use database function to register customer account
-      const { data, error } = await supabase.rpc('register_customer_account', {
-        _phone: phone,
-        _pin: pin
+      const { data, error } = await supabase.functions.invoke('customer-auth', {
+        body: { action: 'register', phone, pin }
       });
 
       if (error) {
         return { success: false, error: error.message };
       }
 
-      const result = data as unknown as RegisterResult;
-      if (!result.success) {
-        return { success: false, error: result.error };
+      if (!data.success) {
+        return { success: false, error: data.error };
       }
 
-      // If auto-approved, also create auth user
-      if (result.approved && result.customer_id) {
-        const email = `customer_${phone}@awadhdairy.com`;
-        await supabase.auth.signUp({
-          email,
-          password: pin,
-          options: {
-            data: {
-              is_customer: true,
-              customer_id: result.customer_id,
-              phone,
-            },
-          },
-        });
-      }
-
-      return { success: true, approved: result.approved };
+      return { success: true, approved: data.approved };
     } catch (err: any) {
       return { success: false, error: err.message };
     }
@@ -237,33 +155,15 @@ export function CustomerAuthProvider({ children }: { children: React.ReactNode }
     }
 
     try {
-      // Use database function to update PIN
-      const { data, error } = await supabase.rpc('update_customer_pin', {
-        _customer_id: customerId,
-        _current_pin: currentPin,
-        _new_pin: newPin
+      const { data, error } = await supabase.functions.invoke('customer-auth', {
+        body: { action: 'change-pin', customerId, currentPin, newPin }
       });
 
       if (error) {
         return { success: false, error: error.message };
       }
 
-      const result = data as unknown as ChangePinResult;
-      if (!result.success) {
-        return { success: false, error: result.error };
-      }
-
-      // Also update Supabase Auth password for consistency
-      const { error: authError } = await supabase.auth.updateUser({
-        password: newPin,
-      });
-
-      if (authError) {
-        console.warn("Auth password update failed (non-critical):", authError.message);
-        // Don't fail - PIN hash is the primary auth method
-      }
-
-      return { success: true, message: result.message };
+      return data;
     } catch (err: any) {
       return { success: false, error: err.message };
     }

@@ -24,6 +24,7 @@ export default function Auth() {
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
+  const [bootstrapping, setBootstrapping] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -50,6 +51,55 @@ export default function Auth() {
     return `${cleanPhone}@awadhdairy.com`;
   };
 
+  const handleBootstrap = async () => {
+    const cleanPhone = phone.replace(/[^0-9]/g, '');
+    
+    // Validate basic input requirements before sending to server
+    if (cleanPhone.length < 10 || pin.length !== 6) {
+      toast({
+        title: "Invalid credentials",
+        description: "Please enter valid phone number and 6-digit PIN.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setBootstrapping(true);
+
+    try {
+      // Server-side validation against secure environment variables
+      const response = await supabase.functions.invoke('bootstrap-admin', {
+        body: { phone: cleanPhone, pin }
+      });
+
+      if (response.error) {
+        toast({
+          title: "Bootstrap failed",
+          description: response.error.message || "Could not create admin account.",
+          variant: "destructive",
+        });
+        setBootstrapping(false);
+        return;
+      }
+
+      toast({
+        title: "Admin account ready",
+        description: "You can now sign in with your credentials.",
+      });
+
+      // Now try to login
+      setBootstrapping(false);
+      await handleLogin();
+    } catch (err) {
+      toast({
+        title: "Bootstrap failed",
+        description: "Could not create admin account. Please try again.",
+        variant: "destructive",
+      });
+      setBootstrapping(false);
+    }
+  };
+
   const handleLogin = async () => {
     const cleanPhone = phone.replace(/[^0-9]/g, '');
 
@@ -67,92 +117,28 @@ export default function Auth() {
     }
 
     setLoading(true);
+
     const email = phoneToEmail(cleanPhone);
-
-    // Step 1: Try native Supabase Auth login
-    const { data, error } = await supabase.auth.signInWithPassword({
+    
+    const { error } = await supabase.auth.signInWithPassword({
       email,
       password: pin,
-    });
-
-    if (!error && data?.session) {
-      // Success - user already has auth account
-      setLoading(false);
-      toast({
-        title: "Welcome back!",
-        description: "Successfully logged in.",
-      });
-      navigate('/dashboard');
-      return;
-    }
-
-    // Step 2: Fallback - verify PIN against profiles table for legacy users
-    // Using any type because verify_staff_pin is a custom function not in generated types
-    const { data: verifyData, error: verifyError } = await (supabase.rpc as any)('verify_staff_pin', {
-      _phone: cleanPhone,
-      _pin: pin
-    });
-
-    const verifyResults = verifyData as { user_id: string; is_active: boolean; full_name: string; role: string }[] | null;
-
-    if (verifyError || !verifyResults || verifyResults.length === 0) {
-      setLoading(false);
-      toast({
-        title: "Login failed",
-        description: "Invalid mobile number or PIN. Please try again.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    const staffUser = verifyResults[0];
-
-    // Check if user is active
-    if (!staffUser.is_active) {
-      setLoading(false);
-      toast({
-        title: "Account Inactive",
-        description: "Your account has been deactivated. Contact admin.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Step 3: PIN valid - create auth account for legacy user
-    const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
-      email,
-      password: pin,
-      options: {
-        data: {
-          phone: cleanPhone,
-          full_name: staffUser.full_name,
-        },
-      },
     });
 
     setLoading(false);
 
-    if (signUpError) {
+    if (error) {
       toast({
         title: "Login failed",
-        description: "Unable to complete login. Please contact admin.",
+        description: sanitizeError(error, "Invalid mobile number or PIN. Please try again."),
         variant: "destructive",
       });
-      return;
-    }
-
-    if (signUpData?.session) {
+    } else {
       toast({
         title: "Welcome back!",
         description: "Successfully logged in.",
       });
       navigate('/dashboard');
-    } else {
-      // Email confirmation might be required
-      toast({
-        title: "Account Created",
-        description: "Please try logging in again.",
-      });
     }
   };
 
@@ -161,6 +147,10 @@ export default function Auth() {
     setErrors({});
     await handleLogin();
   };
+
+  const cleanPhone = phone.replace(/[^0-9]/g, '');
+  // Show bootstrap button when login fails and user has entered valid-looking credentials
+  const showBootstrapOption = cleanPhone.length >= 10 && pin.length === 6;
 
   return (
     <div className="flex min-h-screen">
@@ -253,7 +243,7 @@ export default function Auth() {
                 )}
               </div>
               
-              <Button type="submit" className="w-full" disabled={loading}>
+              <Button type="submit" className="w-full" disabled={loading || bootstrapping}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -263,6 +253,25 @@ export default function Auth() {
                   "Sign In"
                 )}
               </Button>
+
+              {showBootstrapOption && (
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  className="w-full" 
+                  disabled={loading || bootstrapping}
+                  onClick={handleBootstrap}
+                >
+                  {bootstrapping ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Setting up...
+                    </>
+                  ) : (
+                    "Setup Admin Account"
+                  )}
+                </Button>
+              )}
               
               <p className="text-xs text-center text-muted-foreground mt-4">
                 Contact your administrator for account access
