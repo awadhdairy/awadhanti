@@ -39,9 +39,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   try {
     const supabaseUrl = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL;
     const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-    const supabaseAnonKey = process.env.VITE_SUPABASE_PUBLISHABLE_KEY || process.env.SUPABASE_ANON_KEY;
 
-    if (!supabaseUrl || !supabaseServiceKey || !supabaseAnonKey) {
+    if (!supabaseUrl || !supabaseServiceKey) {
       console.error('Missing Supabase environment variables');
       return res.status(500).json({ error: 'Server configuration error' });
     }
@@ -54,14 +53,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const token = authHeader.replace('Bearer ', '');
-    const supabaseClient = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } }
-    });
-
-    const { data: { user: requestingUser }, error: userError } = await supabaseClient.auth.getUser();
+    
+    const { data: { user: requestingUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !requestingUser) {
+      console.error('Token validation error:', userError);
       return res.status(401).json({ error: 'Invalid authentication' });
     }
+    
+    console.log('Authenticated user:', requestingUser.id);
 
     const { data: roleData, error: roleError } = await supabaseAdmin
       .from('user_roles')
