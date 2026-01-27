@@ -54,29 +54,34 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const authHeader = req.headers.authorization;
     if (!authHeader) {
+      console.error('No authorization header provided');
       return res.status(401).json({ error: 'No authorization header' });
     }
 
     const token = authHeader.replace('Bearer ', '');
+    console.log('Token received, length:', token.length);
     
     const { data: { user: requestingUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
     
-    console.log('Authenticated user:', requestingUser?.id);
-    
     if (userError || !requestingUser) {
-      return res.status(401).json({ error: 'Unauthorized' });
+      console.error('Token validation error:', userError?.message || 'No user returned');
+      return res.status(401).json({ error: 'Unauthorized', details: userError?.message });
     }
+    
+    console.log('Authenticated user ID:', requestingUser.id);
+    console.log('User email:', requestingUser.email);
 
     // Check role from profiles table first (primary source used by frontend)
     const { data: profileData, error: profileError } = await supabaseAdmin
       .from('profiles')
-      .select('role')
+      .select('id, role, full_name')
       .eq('id', requestingUser.id)
       .single();
 
-    console.log('Profile lookup result:', { profileData, profileError });
+    console.log('Profile lookup - data:', JSON.stringify(profileData));
+    console.log('Profile lookup - error:', profileError?.message || 'none');
 
-    let userRole = profileData?.role;
+    let userRole: string | null = profileData?.role || null;
 
     // Fallback to user_roles table if profiles doesn't have the role
     if (!userRole) {
@@ -87,16 +92,27 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .eq('user_id', requestingUser.id)
         .single();
       
-      console.log('user_roles lookup result:', { roleData, roleError });
-      userRole = roleData?.role;
+      console.log('user_roles lookup - data:', JSON.stringify(roleData));
+      console.log('user_roles lookup - error:', roleError?.message || 'none');
+      userRole = roleData?.role || null;
     }
 
-    if (userRole !== 'super_admin') {
-      console.error('Role check failed:', { userRole, userId: requestingUser.id });
-      return res.status(403).json({ error: 'Only super_admin can delete users' });
+    console.log('Final resolved role:', userRole);
+
+    // Case-insensitive comparison
+    if (!userRole || userRole.toLowerCase() !== 'super_admin') {
+      console.error('Role check failed. User role:', userRole, 'User ID:', requestingUser.id);
+      return res.status(403).json({ 
+        error: 'Only super_admin can delete users',
+        debug: { 
+          userId: requestingUser.id,
+          foundRole: userRole,
+          profileFound: !!profileData
+        }
+      });
     }
 
-    console.log('Role verified as super_admin');
+    console.log('Role verified as super_admin, proceeding');
 
     const { userId, action, userIds } = req.body;
 
