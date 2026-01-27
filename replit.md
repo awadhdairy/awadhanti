@@ -51,7 +51,6 @@ The application uses Vercel API routes for server-side operations requiring admi
 ### Backend (Vercel API routes)
 - `SUPABASE_URL` - Supabase API URL (same as VITE_SUPABASE_URL)
 - `SUPABASE_SERVICE_ROLE_KEY` - Supabase service role key (SECRET - never expose)
-- `SUPABASE_ANON_KEY` - Supabase anonymous key
 - `BOOTSTRAP_ADMIN_PHONE` - Phone number for bootstrap admin account
 - `BOOTSTRAP_ADMIN_PIN` - PIN for bootstrap admin account
 
