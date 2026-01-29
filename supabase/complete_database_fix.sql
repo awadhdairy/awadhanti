@@ -59,7 +59,6 @@ GRANT SELECT ON public.profiles_safe TO anon;
 -- Drop all existing policies first
 DO $$
 DECLARE
-  tbl TEXT;
   pol RECORD;
 BEGIN
   FOR pol IN (SELECT policyname, tablename FROM pg_policies WHERE schemaname = 'public') LOOP
@@ -86,7 +85,6 @@ BEGIN
     BEGIN
       EXECUTE format('CREATE POLICY "Enable all for %s" ON public.%I FOR ALL USING (true) WITH CHECK (true)', tbl, tbl);
     EXCEPTION WHEN OTHERS THEN
-      -- Policy might already exist or table doesn't exist
       NULL;
     END;
   END LOOP;
@@ -97,11 +95,11 @@ END $$;
 -- =====================================================
 
 -- 4.1: ROUTES (must come before customers)
-INSERT INTO public.routes (id, name, description, distance_km, is_active)
+INSERT INTO public.routes (id, name, description, area_covered, is_active)
 VALUES 
-  ('11111111-1111-1111-1111-111111111111', 'Route A - City Center', 'Main city center delivery route', 15.5, true),
-  ('22222222-2222-2222-2222-222222222222', 'Route B - Industrial Area', 'Industrial zone delivery', 22.0, true),
-  ('33333333-3333-3333-3333-333333333333', 'Route C - Residential', 'Residential area delivery', 18.5, true)
+  ('11111111-1111-1111-1111-111111111111', 'Route A - City Center', 'Main city center delivery route', 'City Center Area', true),
+  ('22222222-2222-2222-2222-222222222222', 'Route B - Industrial Area', 'Industrial zone delivery', 'Industrial Zone', true),
+  ('33333333-3333-3333-3333-333333333333', 'Route C - Residential', 'Residential area delivery', 'Residential Colony', true)
 ON CONFLICT DO NOTHING;
 
 -- 4.2: PRODUCTS
@@ -199,9 +197,9 @@ ON CONFLICT DO NOTHING;
 INSERT INTO public.bottles (id, bottle_type, size, total_quantity, available_quantity, deposit_amount)
 VALUES 
   ('ffff1111-1111-1111-1111-111111111111', 'glass', '500ml', 200, 150, 20.00),
-  ('ffff2222-2222-2222-2222-222222222222', 'glass', '1liter', 300, 220, 30.00),
+  ('ffff2222-2222-2222-2222-222222222222', 'glass', '1L', 300, 220, 30.00),
   ('ffff3333-3333-3333-3333-333333333333', 'plastic', '500ml', 500, 450, 10.00),
-  ('ffff4444-4444-4444-4444-444444444444', 'plastic', '1liter', 400, 350, 15.00)
+  ('ffff4444-4444-4444-4444-444444444444', 'plastic', '1L', 400, 350, 15.00)
 ON CONFLICT (bottle_type, size) DO NOTHING;
 
 -- 4.12: CUSTOMER BOTTLES
@@ -233,80 +231,80 @@ VALUES
   ('bbbb4444-4444-4444-4444-444444444444', 'pregnancy_check', CURRENT_DATE - 60, NULL, NULL, true, CURRENT_DATE + 164, 'Confirmed pregnant')
 ON CONFLICT DO NOTHING;
 
--- 4.15: FEED INVENTORY
+-- 4.15: FEED INVENTORY (using valid hex UUIDs: 0-9, a-f only)
 INSERT INTO public.feed_inventory (id, name, category, unit, current_stock, min_stock_level, cost_per_unit, supplier)
 VALUES 
-  ('gggg1111-1111-1111-1111-111111111111', 'Green Fodder', 'fodder', 'kg', 2500.00, 500.00, 5.00, 'Local Farm'),
-  ('gggg2222-2222-2222-2222-222222222222', 'Dry Hay', 'fodder', 'kg', 1800.00, 300.00, 8.00, 'Agri Suppliers'),
-  ('gggg3333-3333-3333-3333-333333333333', 'Cattle Feed Mix', 'concentrate', 'kg', 500.00, 100.00, 35.00, 'Amul Feeds'),
-  ('gggg4444-4444-4444-4444-444444444444', 'Mineral Mix', 'supplement', 'kg', 50.00, 10.00, 120.00, 'Vet Pharma'),
-  ('gggg5555-5555-5555-5555-555555555555', 'Oil Cake', 'concentrate', 'kg', 300.00, 50.00, 45.00, 'Oil Mills'),
-  ('gggg6666-6666-6666-6666-666666666666', 'Salt Lick', 'supplement', 'piece', 20.00, 5.00, 80.00, 'Vet Pharma')
+  ('fade1111-1111-1111-1111-111111111111', 'Green Fodder', 'fodder', 'kg', 2500.00, 500.00, 5.00, 'Local Farm'),
+  ('fade2222-2222-2222-2222-222222222222', 'Dry Hay', 'fodder', 'kg', 1800.00, 300.00, 8.00, 'Agri Suppliers'),
+  ('fade3333-3333-3333-3333-333333333333', 'Cattle Feed Mix', 'concentrate', 'kg', 500.00, 100.00, 35.00, 'Amul Feeds'),
+  ('fade4444-4444-4444-4444-444444444444', 'Mineral Mix', 'supplement', 'kg', 50.00, 10.00, 120.00, 'Vet Pharma'),
+  ('fade5555-5555-5555-5555-555555555555', 'Oil Cake', 'concentrate', 'kg', 300.00, 50.00, 45.00, 'Oil Mills'),
+  ('fade6666-6666-6666-6666-666666666666', 'Salt Lick', 'supplement', 'piece', 20.00, 5.00, 80.00, 'Vet Pharma')
 ON CONFLICT DO NOTHING;
 
 -- 4.16: FEED CONSUMPTION
 INSERT INTO public.feed_consumption (feed_id, cattle_id, consumption_date, quantity)
 VALUES 
-  ('gggg1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', CURRENT_DATE, 25.0),
-  ('gggg2222-2222-2222-2222-222222222222', 'bbbb1111-1111-1111-1111-111111111111', CURRENT_DATE, 5.0),
-  ('gggg3333-3333-3333-3333-333333333333', 'bbbb1111-1111-1111-1111-111111111111', CURRENT_DATE, 3.0),
-  ('gggg1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', CURRENT_DATE, 25.0),
-  ('gggg3333-3333-3333-3333-333333333333', 'bbbb2222-2222-2222-2222-222222222222', CURRENT_DATE, 4.0)
+  ('fade1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', CURRENT_DATE, 25.0),
+  ('fade2222-2222-2222-2222-222222222222', 'bbbb1111-1111-1111-1111-111111111111', CURRENT_DATE, 5.0),
+  ('fade3333-3333-3333-3333-333333333333', 'bbbb1111-1111-1111-1111-111111111111', CURRENT_DATE, 3.0),
+  ('fade1111-1111-1111-1111-111111111111', 'bbbb2222-2222-2222-2222-222222222222', CURRENT_DATE, 25.0),
+  ('fade3333-3333-3333-3333-333333333333', 'bbbb2222-2222-2222-2222-222222222222', CURRENT_DATE, 4.0)
 ON CONFLICT DO NOTHING;
 
--- 4.17: EMPLOYEES
+-- 4.17: EMPLOYEES (using valid hex UUIDs)
 INSERT INTO public.employees (id, name, phone, address, role, salary, joining_date, is_active)
 VALUES 
-  ('hhhh1111-1111-1111-1111-111111111111', 'Ramesh Singh', '9988776655', 'Village Bharatpur', 'farm_worker', 15000.00, '2022-01-15', true),
-  ('hhhh2222-2222-2222-2222-222222222222', 'Sunil Kumar', '9988776656', 'Village Jhunjhunu', 'delivery_staff', 12000.00, '2021-06-01', true),
-  ('hhhh3333-3333-3333-3333-333333333333', 'Meena Devi', '9988776657', 'City Area', 'accountant', 20000.00, '2020-03-10', true),
-  ('hhhh4444-4444-4444-4444-444444444444', 'Gopal Sharma', '9988776658', 'Village Sikar', 'farm_worker', 14000.00, '2023-02-20', true)
+  ('abcd1111-1111-1111-1111-111111111111', 'Ramesh Singh', '9988776655', 'Village Bharatpur', 'farm_worker', 15000.00, '2022-01-15', true),
+  ('abcd2222-2222-2222-2222-222222222222', 'Sunil Kumar', '9988776656', 'Village Jhunjhunu', 'delivery_staff', 12000.00, '2021-06-01', true),
+  ('abcd3333-3333-3333-3333-333333333333', 'Meena Devi', '9988776657', 'City Area', 'accountant', 20000.00, '2020-03-10', true),
+  ('abcd4444-4444-4444-4444-444444444444', 'Gopal Sharma', '9988776658', 'Village Sikar', 'farm_worker', 14000.00, '2023-02-20', true)
 ON CONFLICT DO NOTHING;
 
--- 4.18: SHIFTS
+-- 4.18: SHIFTS (using valid hex UUIDs)
 INSERT INTO public.shifts (id, name, start_time, end_time, is_active)
 VALUES 
-  ('iiii1111-1111-1111-1111-111111111111', 'Morning Shift', '05:00:00', '13:00:00', true),
-  ('iiii2222-2222-2222-2222-222222222222', 'Evening Shift', '13:00:00', '21:00:00', true),
-  ('iiii3333-3333-3333-3333-333333333333', 'Night Shift', '21:00:00', '05:00:00', true)
+  ('acdc1111-1111-1111-1111-111111111111', 'Morning Shift', '05:00:00', '13:00:00', true),
+  ('acdc2222-2222-2222-2222-222222222222', 'Evening Shift', '13:00:00', '21:00:00', true),
+  ('acdc3333-3333-3333-3333-333333333333', 'Night Shift', '21:00:00', '05:00:00', true)
 ON CONFLICT DO NOTHING;
 
 -- 4.19: EMPLOYEE SHIFTS
 INSERT INTO public.employee_shifts (employee_id, shift_id, effective_from)
 VALUES 
-  ('hhhh1111-1111-1111-1111-111111111111', 'iiii1111-1111-1111-1111-111111111111', '2024-01-01'),
-  ('hhhh2222-2222-2222-2222-222222222222', 'iiii1111-1111-1111-1111-111111111111', '2024-01-01'),
-  ('hhhh4444-4444-4444-4444-444444444444', 'iiii2222-2222-2222-2222-222222222222', '2024-01-01')
+  ('abcd1111-1111-1111-1111-111111111111', 'acdc1111-1111-1111-1111-111111111111', '2024-01-01'),
+  ('abcd2222-2222-2222-2222-222222222222', 'acdc1111-1111-1111-1111-111111111111', '2024-01-01'),
+  ('abcd4444-4444-4444-4444-444444444444', 'acdc2222-2222-2222-2222-222222222222', '2024-01-01')
 ON CONFLICT DO NOTHING;
 
 -- 4.20: ATTENDANCE
 INSERT INTO public.attendance (employee_id, attendance_date, check_in, check_out, status)
 VALUES 
-  ('hhhh1111-1111-1111-1111-111111111111', CURRENT_DATE, '05:15:00', '13:10:00', 'present'),
-  ('hhhh2222-2222-2222-2222-222222222222', CURRENT_DATE, '05:30:00', NULL, 'present'),
-  ('hhhh3333-3333-3333-3333-333333333333', CURRENT_DATE, '09:00:00', '18:00:00', 'present'),
-  ('hhhh4444-4444-4444-4444-444444444444', CURRENT_DATE, '13:05:00', NULL, 'present'),
-  ('hhhh1111-1111-1111-1111-111111111111', CURRENT_DATE - 1, '05:10:00', '13:05:00', 'present'),
-  ('hhhh2222-2222-2222-2222-222222222222', CURRENT_DATE - 1, '05:20:00', '13:30:00', 'present')
+  ('abcd1111-1111-1111-1111-111111111111', CURRENT_DATE, '05:15:00', '13:10:00', 'present'),
+  ('abcd2222-2222-2222-2222-222222222222', CURRENT_DATE, '05:30:00', NULL, 'present'),
+  ('abcd3333-3333-3333-3333-333333333333', CURRENT_DATE, '09:00:00', '18:00:00', 'present'),
+  ('abcd4444-4444-4444-4444-444444444444', CURRENT_DATE, '13:05:00', NULL, 'present'),
+  ('abcd1111-1111-1111-1111-111111111111', CURRENT_DATE - 1, '05:10:00', '13:05:00', 'present'),
+  ('abcd2222-2222-2222-2222-222222222222', CURRENT_DATE - 1, '05:20:00', '13:30:00', 'present')
 ON CONFLICT (employee_id, attendance_date) DO NOTHING;
 
--- 4.21: EQUIPMENT
+-- 4.21: EQUIPMENT (using valid hex UUIDs)
 INSERT INTO public.equipment (id, name, category, model, purchase_date, purchase_cost, status, location)
 VALUES 
-  ('jjjj1111-1111-1111-1111-111111111111', 'Milking Machine', 'milking', 'DeLaval VMS', '2022-05-15', 250000.00, 'active', 'Milking Parlor'),
-  ('jjjj2222-2222-2222-2222-222222222222', 'Bulk Milk Cooler', 'storage', 'BMC-500L', '2021-08-20', 180000.00, 'active', 'Milk Storage'),
-  ('jjjj3333-3333-3333-3333-333333333333', 'Fodder Cutter', 'feeding', 'Chaff Cutter Pro', '2023-01-10', 45000.00, 'active', 'Feed Storage'),
-  ('jjjj4444-4444-4444-4444-444444444444', 'Generator', 'power', 'Mahindra 25kVA', '2020-03-25', 150000.00, 'maintenance', 'Power Room'),
-  ('jjjj5555-5555-5555-5555-555555555555', 'Delivery Van', 'transport', 'Tata Ace', '2022-11-01', 450000.00, 'active', 'Vehicle Shed')
+  ('bead1111-1111-1111-1111-111111111111', 'Milking Machine', 'milking', 'DeLaval VMS', '2022-05-15', 250000.00, 'active', 'Milking Parlor'),
+  ('bead2222-2222-2222-2222-222222222222', 'Bulk Milk Cooler', 'storage', 'BMC-500L', '2021-08-20', 180000.00, 'active', 'Milk Storage'),
+  ('bead3333-3333-3333-3333-333333333333', 'Fodder Cutter', 'feeding', 'Chaff Cutter Pro', '2023-01-10', 45000.00, 'active', 'Feed Storage'),
+  ('bead4444-4444-4444-4444-444444444444', 'Generator', 'power', 'Mahindra 25kVA', '2020-03-25', 150000.00, 'maintenance', 'Power Room'),
+  ('bead5555-5555-5555-5555-555555555555', 'Delivery Van', 'transport', 'Tata Ace', '2022-11-01', 450000.00, 'active', 'Vehicle Shed')
 ON CONFLICT DO NOTHING;
 
 -- 4.22: MAINTENANCE RECORDS
 INSERT INTO public.maintenance_records (equipment_id, maintenance_type, maintenance_date, description, cost, performed_by, next_maintenance_date)
 VALUES 
-  ('jjjj1111-1111-1111-1111-111111111111', 'preventive', CURRENT_DATE - 30, 'Regular servicing and cleaning', 5000.00, 'DeLaval Service', CURRENT_DATE + 60),
-  ('jjjj2222-2222-2222-2222-222222222222', 'preventive', CURRENT_DATE - 45, 'Compressor check and gas refill', 8000.00, 'Cooling Experts', CURRENT_DATE + 45),
-  ('jjjj4444-4444-4444-4444-444444444444', 'repair', CURRENT_DATE - 5, 'Engine oil change and filter replacement', 3500.00, 'Local Mechanic', CURRENT_DATE + 85),
-  ('jjjj5555-5555-5555-5555-555555555555', 'preventive', CURRENT_DATE - 15, 'Full vehicle service', 7500.00, 'Tata Service Center', CURRENT_DATE + 75)
+  ('bead1111-1111-1111-1111-111111111111', 'preventive', CURRENT_DATE - 30, 'Regular servicing and cleaning', 5000.00, 'DeLaval Service', CURRENT_DATE + 60),
+  ('bead2222-2222-2222-2222-222222222222', 'preventive', CURRENT_DATE - 45, 'Compressor check and gas refill', 8000.00, 'Cooling Experts', CURRENT_DATE + 45),
+  ('bead4444-4444-4444-4444-444444444444', 'repair', CURRENT_DATE - 5, 'Engine oil change and filter replacement', 3500.00, 'Local Mechanic', CURRENT_DATE + 85),
+  ('bead5555-5555-5555-5555-555555555555', 'preventive', CURRENT_DATE - 15, 'Full vehicle service', 7500.00, 'Tata Service Center', CURRENT_DATE + 75)
 ON CONFLICT DO NOTHING;
 
 -- 4.23: EXPENSES
@@ -341,17 +339,10 @@ VALUES
 ON CONFLICT DO NOTHING;
 
 -- 4.26: DAIRY SETTINGS
-INSERT INTO public.dairy_settings (key, value, description)
+INSERT INTO public.dairy_settings (id, dairy_name, address, phone, email, invoice_prefix, settings)
 VALUES 
-  ('dairy_name', 'Awadh Dairy', 'Name of the dairy'),
-  ('dairy_address', 'Village Khairabad, District Ayodhya, UP', 'Dairy address'),
-  ('dairy_phone', '+91 9876543210', 'Contact number'),
-  ('default_milk_rate', '60', 'Default rate per liter'),
-  ('gst_number', 'GSTIN09AAACW1234L1ZD', 'GST registration number'),
-  ('invoice_prefix', 'INV', 'Prefix for invoice numbers'),
-  ('delivery_start_time', '05:00', 'Default delivery start time'),
-  ('milk_collection_sessions', '["morning", "evening"]', 'Available milk collection sessions')
-ON CONFLICT (key) DO NOTHING;
+  ('defa1111-1111-1111-1111-111111111111', 'Awadh Dairy', 'Village Khairabad, District Ayodhya, UP', '+91 9876543210', 'info@awadhdairy.com', 'INV', '{"gst_number": "GSTIN09AAACW1234L1ZD", "delivery_start_time": "05:00"}')
+ON CONFLICT DO NOTHING;
 
 -- =====================================================
 -- PART 5: VERIFY DATA
