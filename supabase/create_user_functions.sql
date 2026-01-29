@@ -1,11 +1,19 @@
 -- =====================================================
--- MISSING FUNCTIONS FOR USER CREATION
+-- ALL MISSING FUNCTIONS FOR USER MANAGEMENT
 -- =====================================================
--- Run this in Supabase SQL Editor to fix user creation
--- These functions are required by the create-user API
+-- Run this in Supabase SQL Editor
 -- =====================================================
 
--- Function to update only the PIN hash for a user
+-- Drop existing functions first
+DROP FUNCTION IF EXISTS public.update_pin_only(UUID, TEXT);
+DROP FUNCTION IF EXISTS public.update_user_profile_with_pin(UUID, TEXT, TEXT, TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.verify_pin(TEXT, TEXT);
+DROP FUNCTION IF EXISTS public.admin_update_user_status(UUID, BOOLEAN);
+DROP FUNCTION IF EXISTS public.admin_reset_user_pin(UUID, TEXT);
+
+-- =====================================================
+-- 1. UPDATE PIN ONLY
+-- =====================================================
 CREATE OR REPLACE FUNCTION public.update_pin_only(
   _user_id UUID,
   _pin TEXT
@@ -30,7 +38,9 @@ BEGIN
 END;
 $$;
 
--- Function to update user profile with PIN (alternative method)
+-- =====================================================
+-- 2. UPDATE USER PROFILE WITH PIN
+-- =====================================================
 CREATE OR REPLACE FUNCTION public.update_user_profile_with_pin(
   _user_id UUID,
   _full_name TEXT,
@@ -64,10 +74,15 @@ BEGIN
     updated_at = NOW();
   
   RETURN TRUE;
+EXCEPTION WHEN OTHERS THEN
+  RAISE NOTICE 'Error in update_user_profile_with_pin: %', SQLERRM;
+  RETURN FALSE;
 END;
 $$;
 
--- Function to verify PIN during login
+-- =====================================================
+-- 3. VERIFY PIN (for login)
+-- =====================================================
 CREATE OR REPLACE FUNCTION public.verify_pin(
   _phone TEXT,
   _pin TEXT
@@ -90,13 +105,81 @@ BEGIN
 END;
 $$;
 
--- Grant execute permissions
+-- =====================================================
+-- 4. ADMIN UPDATE USER STATUS
+-- =====================================================
+CREATE OR REPLACE FUNCTION public.admin_update_user_status(
+  _target_user_id UUID,
+  _is_active BOOLEAN
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+BEGIN
+  UPDATE public.profiles
+  SET is_active = _is_active, updated_at = NOW()
+  WHERE id = _target_user_id;
+  
+  IF FOUND THEN
+    RETURN jsonb_build_object(
+      'success', true,
+      'message', CASE WHEN _is_active THEN 'User activated' ELSE 'User deactivated' END
+    );
+  ELSE
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+END;
+$$;
+
+-- =====================================================
+-- 5. ADMIN RESET USER PIN
+-- =====================================================
+CREATE OR REPLACE FUNCTION public.admin_reset_user_pin(
+  _target_user_id UUID,
+  _new_pin TEXT
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+  _pin_hash TEXT;
+BEGIN
+  -- Hash the new PIN
+  _pin_hash := crypt(_new_pin, gen_salt('bf'));
+  
+  -- Update the pin_hash
+  UPDATE public.profiles
+  SET pin_hash = _pin_hash, updated_at = NOW()
+  WHERE id = _target_user_id;
+  
+  IF FOUND THEN
+    RETURN jsonb_build_object('success', true, 'message', 'PIN reset successfully');
+  ELSE
+    RETURN jsonb_build_object('success', false, 'error', 'User not found');
+  END IF;
+END;
+$$;
+
+-- =====================================================
+-- GRANT PERMISSIONS
+-- =====================================================
 GRANT EXECUTE ON FUNCTION public.update_pin_only(UUID, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.update_pin_only(UUID, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.update_user_profile_with_pin(UUID, TEXT, TEXT, TEXT, TEXT) TO authenticated;
 GRANT EXECUTE ON FUNCTION public.update_user_profile_with_pin(UUID, TEXT, TEXT, TEXT, TEXT) TO service_role;
 GRANT EXECUTE ON FUNCTION public.verify_pin(TEXT, TEXT) TO anon;
 GRANT EXECUTE ON FUNCTION public.verify_pin(TEXT, TEXT) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_update_user_status(UUID, BOOLEAN) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.admin_reset_user_pin(UUID, TEXT) TO authenticated;
+
+-- =====================================================
+-- VERIFY PGCRYPTO EXTENSION
+-- =====================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
 -- Success message
-SELECT 'User creation functions created successfully!' as status;
+SELECT 'All user management functions created successfully!' as status;
