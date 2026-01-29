@@ -20,14 +20,14 @@ A comprehensive dairy farm management system built with React, TypeScript, and S
 
 ## 📋 Deployment Guide
 
-See [DEPLOYMENT_GUIDE.md](./DEPLOYMENT_GUIDE.md) for complete free-tier deployment instructions.
+See [DEPLOYMENT.md](./DEPLOYMENT.md) for complete deployment instructions.
 
 ### Quick Start
 
 ```bash
 # Clone and install
 git clone <your-repo-url>
-cd awadh-dairy
+cd awadhdairy
 npm install
 
 # Configure environment
@@ -56,7 +56,7 @@ VITE_SUPABASE_PROJECT_ID=your-project-id
 
 ## 👤 Initial Setup
 
-1. Deploy to Vercel and Supabase
+1. Deploy to Vercel and run SQL schema in Supabase
 2. Navigate to `/auth`
 3. Enter admin credentials: `7897716792` / `101101`
 4. Click "Setup Admin Account"
@@ -66,16 +66,21 @@ VITE_SUPABASE_PROJECT_ID=your-project-id
 
 ```
 src/
-├── components/     # Reusable UI components
-├── hooks/          # Custom React hooks
-├── pages/          # Route pages
+├── components/     # Reusable UI components (115+)
+├── hooks/          # Custom React hooks (24)
+├── pages/          # Route pages (30)
 ├── lib/            # Utilities
 └── integrations/   # Supabase client
 
+api/
+├── bootstrap-admin.ts  # Initial admin setup
+├── create-user.ts      # Staff user creation
+├── customer-auth.ts    # Customer auth
+└── delete-user.ts      # User deletion
+
 supabase/
-├── functions/      # Edge functions
-├── migrations/     # Database migrations
-└── config.toml     # Supabase config
+├── migrations/              # Individual migrations (35)
+└── consolidated_schema.sql  # Complete schema (run this!)
 ```
 
 ## 📄 License

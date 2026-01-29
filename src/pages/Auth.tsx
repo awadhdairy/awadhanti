@@ -24,7 +24,6 @@ export default function Auth() {
   const [phone, setPhone] = useState("");
   const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
-  const [bootstrapping, setBootstrapping] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -51,57 +50,6 @@ export default function Auth() {
     return `${cleanPhone}@awadhdairy.com`;
   };
 
-  const handleBootstrap = async () => {
-    const cleanPhone = phone.replace(/[^0-9]/g, '');
-    
-    // Validate basic input requirements before sending to server
-    if (cleanPhone.length < 10 || pin.length !== 6) {
-      toast({
-        title: "Invalid credentials",
-        description: "Please enter valid phone number and 6-digit PIN.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    setBootstrapping(true);
-
-    try {
-      const response = await fetch('/api/bootstrap-admin', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: cleanPhone, pin })
-      });
-
-      const data = await response.json();
-
-      if (!response.ok || data.error) {
-        toast({
-          title: "Bootstrap failed",
-          description: data.error || "Could not create admin account.",
-          variant: "destructive",
-        });
-        setBootstrapping(false);
-        return;
-      }
-
-      toast({
-        title: "Admin account ready",
-        description: "You can now sign in with your credentials.",
-      });
-
-      setBootstrapping(false);
-      await handleLogin();
-    } catch (err) {
-      toast({
-        title: "Bootstrap failed",
-        description: "Could not create admin account. Please try again.",
-        variant: "destructive",
-      });
-      setBootstrapping(false);
-    }
-  };
-
   const handleLogin = async () => {
     const cleanPhone = phone.replace(/[^0-9]/g, '');
 
@@ -121,7 +69,7 @@ export default function Auth() {
     setLoading(true);
 
     const email = phoneToEmail(cleanPhone);
-    
+
     const { error } = await supabase.auth.signInWithPassword({
       email,
       password: pin,
@@ -150,18 +98,14 @@ export default function Auth() {
     await handleLogin();
   };
 
-  const cleanPhone = phone.replace(/[^0-9]/g, '');
-  // Show bootstrap button when login fails and user has entered valid-looking credentials
-  const showBootstrapOption = cleanPhone.length >= 10 && pin.length === 6;
-
   return (
     <div className="flex min-h-screen">
       {/* Left side - Branding */}
       <div className="hidden w-1/2 gradient-hero lg:flex lg:flex-col lg:items-center lg:justify-center lg:p-12">
         <div className="max-w-md text-center animate-fade-in">
-          <img 
-            src={awadhDairyLogo} 
-            alt="Awadh Dairy" 
+          <img
+            src={awadhDairyLogo}
+            alt="Awadh Dairy"
             className="mx-auto mb-6 h-32 w-32 object-contain"
           />
           <h1 className="mb-4 text-4xl font-bold text-sidebar-foreground">
@@ -188,13 +132,13 @@ export default function Auth() {
         </div>
       </div>
 
-      {/* Right side - Login form only */}
+      {/* Right side - Login form */}
       <div className="flex w-full items-center justify-center bg-background p-6 lg:w-1/2">
         <Card className="w-full max-w-md border-border/50 shadow-lg animate-slide-up">
           <CardHeader className="text-center">
-            <img 
-              src={awadhDairyLogo} 
-              alt="Awadh Dairy" 
+            <img
+              src={awadhDairyLogo}
+              alt="Awadh Dairy"
               className="mx-auto mb-2 h-16 w-16 object-contain lg:hidden"
             />
             <CardTitle className="text-2xl font-bold">Welcome</CardTitle>
@@ -225,9 +169,9 @@ export default function Auth() {
               <div className="space-y-2">
                 <Label htmlFor="login-pin">6-Digit PIN</Label>
                 <div className="flex justify-center">
-                  <InputOTP 
-                    maxLength={6} 
-                    value={pin} 
+                  <InputOTP
+                    maxLength={6}
+                    value={pin}
                     onChange={setPin}
                   >
                     <InputOTPGroup>
@@ -244,8 +188,8 @@ export default function Auth() {
                   <p className="text-xs text-destructive text-center">{errors.pin}</p>
                 )}
               </div>
-              
-              <Button type="submit" className="w-full" disabled={loading || bootstrapping}>
+
+              <Button type="submit" className="w-full" disabled={loading}>
                 {loading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -256,25 +200,6 @@ export default function Auth() {
                 )}
               </Button>
 
-              {showBootstrapOption && (
-                <Button 
-                  type="button" 
-                  variant="outline" 
-                  className="w-full" 
-                  disabled={loading || bootstrapping}
-                  onClick={handleBootstrap}
-                >
-                  {bootstrapping ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Setting up...
-                    </>
-                  ) : (
-                    "Setup Admin Account"
-                  )}
-                </Button>
-              )}
-              
               <p className="text-xs text-center text-muted-foreground mt-4">
                 Contact your administrator for account access
               </p>
@@ -285,3 +210,4 @@ export default function Auth() {
     </div>
   );
 }
+

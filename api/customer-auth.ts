@@ -2,12 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 const ALLOWED_ORIGINS = [
-  'https://awadhd.lovable.app',
   'https://awadhdairy.vercel.app',
-  'https://id-preview--c9769607-a092-45ff-8257-44be40434034.lovable.app',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5000',
+  // Add your custom domain here if you have one
 ];
 
 function isValidOrigin(origin: string | null): boolean {
@@ -32,7 +31,7 @@ function getCorsOrigin(origin: string | null): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin as string | null;
   const corsOrigin = getCorsOrigin(origin);
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200)
       .setHeader('Access-Control-Allow-Origin', corsOrigin)
@@ -41,7 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .setHeader('Access-Control-Allow-Credentials', 'true')
       .end();
   }
-  
+
   res.setHeader('Access-Control-Allow-Origin', corsOrigin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
@@ -94,7 +93,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (data?.approved) {
           const email = `customer_${phone}@awadhdairy.com`;
-          
+
           const { data: authUser, error: authError } = await supabaseAdmin.auth.admin.createUser({
             email,
             password: pin,
@@ -154,7 +153,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const email = `customer_${phone}@awadhdairy.com`;
         const origin = req.headers.origin as string | null;
         const safeRedirect = getSafeRedirectUrl(origin, '/customer/dashboard');
-        
+
         const { data: signInData, error: signInError } = await supabaseAdmin.auth.admin.generateLink({
           type: 'magiclink',
           email,
@@ -165,7 +164,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (signInError) {
           console.error('Sign in error:', signInError);
-          
+
           if (signInError.message.includes('User not found')) {
             const { data: newUser, error: createError } = await supabaseAdmin.auth.admin.createUser({
               email,
@@ -196,10 +195,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
         if (sessionError) {
           console.error('Session creation error:', sessionError);
-          
+
           const { data: userData } = await supabaseAdmin.auth.admin.listUsers();
           const existingUser = userData?.users?.find(u => u.email === email);
-          
+
           if (existingUser) {
             await supabaseAdmin.auth.admin.updateUserById(existingUser.id, {
               password: pin,

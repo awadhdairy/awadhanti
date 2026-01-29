@@ -2,11 +2,11 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
 const ALLOWED_ORIGINS = [
-  'https://awadhd.lovable.app',
   'https://awadhdairy.vercel.app',
   'http://localhost:5173',
   'http://localhost:3000',
   'http://localhost:5000',
+  // Add your custom domain here if you have one
 ];
 
 function getCorsOrigin(origin: string | null): string {
@@ -19,7 +19,7 @@ function getCorsOrigin(origin: string | null): string {
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const origin = req.headers.origin as string | null;
   const corsOrigin = getCorsOrigin(origin);
-  
+
   if (req.method === 'OPTIONS') {
     return res.status(200)
       .setHeader('Access-Control-Allow-Origin', corsOrigin)
@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .setHeader('Access-Control-Allow-Credentials', 'true')
       .end();
   }
-  
+
   res.setHeader('Access-Control-Allow-Origin', corsOrigin);
   res.setHeader('Access-Control-Allow-Credentials', 'true');
 
@@ -60,13 +60,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const token = authHeader.replace('Bearer ', '');
     console.log('Token received, length:', token.length);
-    
+
     const { data: { user: requestingUser }, error: userError } = await supabaseAdmin.auth.getUser(token);
     if (userError || !requestingUser) {
       console.error('Token validation error:', userError?.message || 'No user returned');
       return res.status(401).json({ error: 'Invalid authentication', details: userError?.message });
     }
-    
+
     console.log('Authenticated user ID:', requestingUser.id);
     console.log('User email:', requestingUser.email);
 
@@ -90,7 +90,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         .select('role')
         .eq('user_id', requestingUser.id)
         .single();
-      
+
       console.log('user_roles lookup - data:', JSON.stringify(roleData));
       console.log('user_roles lookup - error:', roleError?.message || 'none');
       userRole = roleData?.role || null;
@@ -101,9 +101,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     // Case-insensitive comparison
     if (!userRole || userRole.toLowerCase() !== 'super_admin') {
       console.error('Role check failed. User role:', userRole, 'User ID:', requestingUser.id);
-      return res.status(403).json({ 
+      return res.status(403).json({
         error: 'Only super admin can create users',
-        debug: { 
+        debug: {
           userId: requestingUser.id,
           foundRole: userRole,
           profileFound: !!profileData
@@ -142,7 +142,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { data: existingUsers } = await supabaseAdmin.auth.admin.listUsers();
     const emailExists = existingUsers?.users?.some(u => u.email === email);
-    
+
     if (emailExists) {
       return res.status(400).json({ error: 'A user with this phone number already exists in the system. Please use a different phone number or contact support to reset the existing account.' });
     }
@@ -242,8 +242,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     console.log('User created and verified successfully:', verifyProfile);
 
-    return res.status(200).json({ 
-      success: true, 
+    return res.status(200).json({
+      success: true,
       message: 'User created successfully',
       userId: userId
     });
