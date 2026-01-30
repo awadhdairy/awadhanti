@@ -1,4 +1,9 @@
 -- =====================================================
+-- ENSURE PGCRYPTO EXTENSION IS ENABLED FIRST
+-- =====================================================
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
+-- =====================================================
 -- ALL MISSING FUNCTIONS FOR USER MANAGEMENT
 -- =====================================================
 -- Run this in Supabase SQL Editor
@@ -177,9 +182,5 @@ GRANT EXECUTE ON FUNCTION public.admin_update_user_status(UUID, BOOLEAN) TO auth
 GRANT EXECUTE ON FUNCTION public.admin_reset_user_pin(UUID, TEXT) TO authenticated;
 
 -- =====================================================
--- VERIFY PGCRYPTO EXTENSION
+-- (pgcrypto extension is now enabled at the top of this file)
 -- =====================================================
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-
--- Success message
-SELECT 'All user management functions created successfully!' as status;
