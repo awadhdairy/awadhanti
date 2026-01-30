@@ -139,28 +139,52 @@ export function QuickAddOnOrderDialog({
 
     setSaving(true);
     try {
-      // Create delivery record with delivery_time since it's marked as delivered
-      // Use ISO timestamp format for the TIMESTAMP WITH TIME ZONE column
       const currentTime = new Date().toISOString();
-      
-      const { data: delivery, error: deliveryError } = await supabase
+      const formattedDate = format(deliveryDate, "yyyy-MM-dd");
+
+      // First check if delivery already exists for this customer on this date
+      const { data: existingDelivery } = await supabase
         .from("deliveries")
-        .insert({
-          customer_id: customerId,
-          delivery_date: format(deliveryDate, "yyyy-MM-dd"),
-          status: "delivered",
-          delivery_time: currentTime,
-          notes: "Add-on order",
-        })
         .select("id")
-        .single();
+        .eq("customer_id", customerId)
+        .eq("delivery_date", formattedDate)
+        .maybeSingle();
 
+      let deliveryId: string;
 
-      if (deliveryError) throw deliveryError;
+      if (existingDelivery) {
+        // Use existing delivery
+        deliveryId = existingDelivery.id;
+        // Update the notes to indicate add-on was added
+        await supabase
+          .from("deliveries")
+          .update({
+            notes: "Updated with add-on order",
+            delivery_time: currentTime,
+            status: "delivered"
+          })
+          .eq("id", deliveryId);
+      } else {
+        // Create new delivery record
+        const { data: delivery, error: deliveryError } = await supabase
+          .from("deliveries")
+          .insert({
+            customer_id: customerId,
+            delivery_date: formattedDate,
+            status: "delivered",
+            delivery_time: currentTime,
+            notes: "Add-on order",
+          })
+          .select("id")
+          .single();
+
+        if (deliveryError) throw deliveryError;
+        deliveryId = delivery.id;
+      }
 
       // Create delivery items
       const deliveryItems = orderItems.map((item) => ({
-        delivery_id: delivery.id,
+        delivery_id: deliveryId,
         product_id: item.product_id,
         quantity: item.quantity,
         unit_price: item.unit_price,
@@ -178,11 +202,11 @@ export function QuickAddOnOrderDialog({
         .from("customer_ledger")
         .insert({
           customer_id: customerId,
-          transaction_date: format(deliveryDate, "yyyy-MM-dd"),
+          transaction_date: formattedDate,
           transaction_type: "delivery",
           description: `Add-on Order: ${orderItems.map((i) => `${i.product_name} × ${i.quantity}`).join(", ")}`,
           debit_amount: totalAmount,
-          reference_id: delivery.id,
+          reference_id: deliveryId,
         });
 
       if (ledgerError) throw ledgerError;
@@ -197,6 +221,7 @@ export function QuickAddOnOrderDialog({
       setSaving(false);
     }
   };
+
 
   const handleGoToDeliveries = () => {
     onOpenChange(false);
