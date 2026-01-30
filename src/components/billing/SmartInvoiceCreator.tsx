@@ -22,12 +22,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { useToast } from "@/hooks/use-toast";
 import { format, startOfMonth, endOfMonth } from "date-fns";
-import { 
-  Loader2, 
-  Plus, 
-  Trash2, 
-  RefreshCw, 
-  Package, 
+import {
+  Loader2,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Package,
   Sparkles,
   Calculator,
   AlertCircle
@@ -160,14 +160,14 @@ export function SmartInvoiceCreator({
         delivery_count: number;
       }>();
 
-      let totalDeliveries = deliveries?.length || 0;
+      const totalDeliveries = deliveries?.length || 0;
       setDeliveryCount(totalDeliveries);
 
       deliveries?.forEach(delivery => {
         (delivery.delivery_items || []).forEach((item: any) => {
           const existing = itemsMap.get(item.product_id);
           const isAddon = !subscriptionProductIds.has(item.product_id);
-          
+
           if (existing) {
             existing.quantity += item.quantity;
             existing.total_amount += item.total_amount;
@@ -186,7 +186,7 @@ export function SmartInvoiceCreator({
 
       // Convert to line items
       const items: LineItem[] = [];
-      
+
       itemsMap.forEach((data, productId) => {
         const product = products.find(p => p.id === productId);
         if (product) {
@@ -259,9 +259,9 @@ export function SmartInvoiceCreator({
   const updateLineItem = (id: string, field: keyof LineItem, value: any) => {
     setLineItems(lineItems.map(item => {
       if (item.id !== id) return item;
-      
+
       const updated = { ...item, [field]: value };
-      
+
       // If product is selected, auto-fill rate and unit
       if (field === "product_id") {
         const product = products.find(p => p.id === value);
@@ -272,12 +272,12 @@ export function SmartInvoiceCreator({
           updated.tax_percentage = product.tax_percentage || 0;
         }
       }
-      
+
       // Recalculate amount
       const baseAmount = updated.quantity * updated.rate;
       const taxAmount = (baseAmount * updated.tax_percentage) / 100;
       updated.amount = baseAmount + taxAmount;
-      
+
       return updated;
     }));
   };
@@ -285,16 +285,16 @@ export function SmartInvoiceCreator({
   // Calculate totals
   const subscriptionItems = lineItems.filter(i => !i.is_addon);
   const addonItems = lineItems.filter(i => i.is_addon);
-  
+
   const subscriptionTotal = subscriptionItems.reduce((sum, item) => sum + item.amount, 0);
   const addonTotal = addonItems.reduce((sum, item) => sum + item.amount, 0);
   const subtotal = subscriptionTotal + addonTotal;
-  
+
   const totalTax = lineItems.reduce((sum, item) => {
     const baseAmount = item.quantity * item.rate;
     return sum + (baseAmount * item.tax_percentage) / 100;
   }, 0);
-  
+
   const grandTotal = subtotal - discountAmount;
 
   const generateInvoiceNumber = () => {
@@ -325,18 +325,18 @@ export function SmartInvoiceCreator({
     }
 
     setSaving(true);
-    
+
     // Format line items for notes (to store item details)
     const subscriptionDetail = subscriptionItems
       .filter(item => item.product_id && item.quantity > 0)
       .map(item => `${item.product_name}: ${item.quantity} ${item.unit} @ ₹${item.rate}/${item.unit}`)
       .join("; ");
-    
+
     const addonDetail = addonItems
       .filter(item => item.product_id && item.quantity > 0)
       .map(item => `[ADD-ON] ${item.product_name}: ${item.quantity} ${item.unit} @ ₹${item.rate}/${item.unit}`)
       .join("; ");
-    
+
     const allDetails = [subscriptionDetail, addonDetail].filter(Boolean).join(" | ");
 
     const invoiceNumber = generateInvoiceNumber();
@@ -388,7 +388,7 @@ export function SmartInvoiceCreator({
       title: "Invoice created",
       description: `Invoice ${invoiceNumber} generated successfully`,
     });
-    
+
     onComplete();
     onOpenChange(false);
   };
@@ -406,7 +406,7 @@ export function SmartInvoiceCreator({
           </ResponsiveDialogDescription>
         </ResponsiveDialogHeader>
 
-        <ScrollArea className="flex-1 pr-4 max-h-[60vh]">
+        <ScrollArea className="flex-1 pr-4 overflow-y-auto" style={{ maxHeight: 'calc(80vh - 150px)' }}>
           <div className="grid gap-4 py-4">
             {/* Customer Selection */}
             <div className="space-y-2">
@@ -451,7 +451,7 @@ export function SmartInvoiceCreator({
                   }}
                 />
               </div>
-              <Button 
+              <Button
                 onClick={fetchDeliveryData}
                 disabled={!customerId || loading}
                 className="gap-2"
@@ -497,7 +497,7 @@ export function SmartInvoiceCreator({
                     ₹{subscriptionTotal.toLocaleString("en-IN")}
                   </Badge>
                 </div>
-                
+
                 {renderItemsTable(subscriptionItems, false)}
               </div>
             )}
@@ -514,7 +514,7 @@ export function SmartInvoiceCreator({
                       ₹{addonTotal.toLocaleString("en-IN")}
                     </Badge>
                   </div>
-                  
+
                   {renderItemsTable(addonItems, true)}
                 </div>
               </>
