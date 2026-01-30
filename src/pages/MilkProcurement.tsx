@@ -492,8 +492,8 @@ export default function MilkProcurementPage() {
       header: "Actions",
       render: (item: MilkVendor) => (
         <div className="flex gap-1">
-          <Button 
-            size="sm" 
+          <Button
+            size="sm"
             variant="ghost"
             className="text-green-600 hover:text-green-700 hover:bg-green-50"
             onClick={() => {
@@ -597,8 +597,8 @@ export default function MilkProcurementPage() {
             item.payment_status === "paid"
               ? "paid"
               : item.payment_status === "partial"
-              ? "partial"
-              : "pending"
+                ? "partial"
+                : "pending"
           }
         />
       ),
@@ -781,7 +781,7 @@ export default function MilkProcurementPage() {
             </ResponsiveDialogDescription>
           </ResponsiveDialogHeader>
 
-          <div className="grid gap-4 py-4">
+          <div className="grid gap-4 py-4 overflow-y-auto max-h-[60vh] sm:max-h-[70vh]">
             <div className="space-y-2">
               <Label htmlFor="vendor-name">Vendor Name *</Label>
               <Input
