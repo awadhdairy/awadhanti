@@ -153,3 +153,100 @@ export function useCreateBreedingRecord() {
     },
   });
 }
+
+export interface UpdateBreedingRecordInput extends CreateBreedingRecordInput {
+  id: string;
+}
+
+export function useUpdateBreedingRecord() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (input: UpdateBreedingRecordInput) => {
+      const record: Record<string, unknown> = {
+        cattle_id: input.cattle_id,
+        record_type: input.record_type,
+        record_date: input.record_date,
+        notes: input.notes || null,
+        heat_cycle_day: null,
+        insemination_bull: null,
+        insemination_technician: null,
+        pregnancy_confirmed: null,
+        expected_calving_date: null,
+        actual_calving_date: null,
+        calf_details: null,
+      };
+
+      if (input.record_type === "heat_detection") {
+        record.heat_cycle_day = input.heat_cycle_day ?? null;
+      } else if (input.record_type === "artificial_insemination") {
+        record.insemination_bull = input.insemination_bull || null;
+        record.insemination_technician = input.insemination_technician || null;
+        record.expected_calving_date = input.expected_calving_date || format(
+          addDays(new Date(input.record_date), 283),
+          "yyyy-MM-dd"
+        );
+      } else if (input.record_type === "pregnancy_check") {
+        record.pregnancy_confirmed = input.pregnancy_confirmed ?? null;
+        if (input.expected_calving_date) {
+          record.expected_calving_date = input.expected_calving_date;
+        }
+      } else if (input.record_type === "calving") {
+        record.actual_calving_date = input.actual_calving_date || input.record_date;
+        record.calf_details = input.calf_details || null;
+      }
+
+      const { data, error } = await supabase
+        .from("breeding_records")
+        .update(record)
+        .eq("id", input.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["breeding-data"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-data"] });
+      toast({ title: "Success", description: "Breeding record updated successfully" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+
+export function useDeleteBreedingRecord() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("breeding_records")
+        .delete()
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["breeding-data"] });
+      queryClient.invalidateQueries({ queryKey: ["dashboard-data"] });
+      toast({ title: "Success", description: "Breeding record deleted successfully" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
+}
+

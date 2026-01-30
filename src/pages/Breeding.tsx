@@ -10,11 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Heart, Baby, Syringe, Calendar, AlertCircle, CalendarDays, List, Loader2 } from "lucide-react";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { Plus, Heart, Baby, Syringe, Calendar, AlertCircle, CalendarDays, List, Loader2, Edit, Trash2 } from "lucide-react";
 import { format, differenceInDays } from "date-fns";
 import { BreedingCalendar } from "@/components/breeding/BreedingCalendar";
 import { BreedingPageSkeleton } from "@/components/breeding/BreedingSkeleton";
-import { useBreedingData, useCreateBreedingRecord, type BreedingRecord } from "@/hooks/useBreedingData";
+import { useBreedingData, useCreateBreedingRecord, useUpdateBreedingRecord, useDeleteBreedingRecord, type BreedingRecord } from "@/hooks/useBreedingData";
+import { useUserRole } from "@/hooks/useUserRole";
 import type { LucideIcon } from "lucide-react";
 
 const recordTypeLabels: Record<string, { label: string; color: string; icon: LucideIcon }> = {
@@ -28,10 +30,18 @@ export default function BreedingPage() {
   const { toast } = useToast();
   const { data, isLoading, error } = useBreedingData();
   const createRecord = useCreateBreedingRecord();
-  
+  const updateRecord = useUpdateBreedingRecord();
+  const deleteRecord = useDeleteBreedingRecord();
+  const { role } = useUserRole();
+
+  // Check if user can edit (admin or manager only)
+  const canEdit = role === 'super_admin' || role === 'manager';
+
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [editingRecord, setEditingRecord] = useState<BreedingRecord | null>(null);
   const [viewMode, setViewMode] = useState<"list" | "calendar">("calendar");
-  
+
   // Form states
   const [selectedCattle, setSelectedCattle] = useState("");
   const [recordType, setRecordType] = useState("heat_detection");
@@ -46,13 +56,13 @@ export default function BreedingPage() {
   const [calfWeight, setCalfWeight] = useState("");
   const [notes, setNotes] = useState("");
 
-  const handleCreateRecord = async () => {
+  const handleSaveRecord = async () => {
     if (!selectedCattle || !recordType || !recordDate) {
       toast({ title: "Error", description: "Please fill required fields", variant: "destructive" });
       return;
     }
 
-    await createRecord.mutateAsync({
+    const recordData = {
       cattle_id: selectedCattle,
       record_type: recordType,
       record_date: recordDate,
@@ -64,10 +74,42 @@ export default function BreedingPage() {
       actual_calving_date: actualCalving || null,
       calf_details: recordType === "calving" ? { gender: calfGender, weight: calfWeight ? parseFloat(calfWeight) : null } : null,
       notes: notes || null,
-    });
+    };
+
+    if (editingRecord) {
+      await updateRecord.mutateAsync({ ...recordData, id: editingRecord.id });
+    } else {
+      await createRecord.mutateAsync(recordData);
+    }
 
     setDialogOpen(false);
+    setEditingRecord(null);
     resetForm();
+  };
+
+  const handleEditRecord = (record: BreedingRecord) => {
+    setEditingRecord(record);
+    setSelectedCattle(record.cattle_id);
+    setRecordType(record.record_type);
+    setRecordDate(record.record_date);
+    setHeatCycleDay(record.heat_cycle_day?.toString() || "");
+    setInseminationBull(record.insemination_bull || "");
+    setInseminationTech(record.insemination_technician || "");
+    setPregnancyConfirmed(record.pregnancy_confirmed === true ? "yes" : record.pregnancy_confirmed === false ? "no" : "");
+    setExpectedCalving(record.expected_calving_date || "");
+    setActualCalving(record.actual_calving_date || "");
+    const calfDetails = record.calf_details as { gender?: string; weight?: number } | null;
+    setCalfGender(calfDetails?.gender || "");
+    setCalfWeight(calfDetails?.weight?.toString() || "");
+    setNotes(record.notes || "");
+    setDialogOpen(true);
+  };
+
+  const handleDeleteRecord = async () => {
+    if (!editingRecord) return;
+    await deleteRecord.mutateAsync(editingRecord.id);
+    setDeleteDialogOpen(false);
+    setEditingRecord(null);
   };
 
   const resetForm = () => {
@@ -125,19 +167,19 @@ export default function BreedingPage() {
     .slice(0, 5);
 
   const columns = [
-    { 
-      key: "record_date" as const, 
-      header: "Date", 
-      render: (row: BreedingRecord) => format(new Date(row.record_date), "dd MMM yyyy") 
+    {
+      key: "record_date" as const,
+      header: "Date",
+      render: (row: BreedingRecord) => format(new Date(row.record_date), "dd MMM yyyy")
     },
-    { 
-      key: "cattle_id" as const, 
-      header: "Cattle", 
-      render: (row: BreedingRecord) => getCattleTag(row.cattle_id) 
+    {
+      key: "cattle_id" as const,
+      header: "Cattle",
+      render: (row: BreedingRecord) => getCattleTag(row.cattle_id)
     },
-    { 
-      key: "record_type" as const, 
-      header: "Type", 
+    {
+      key: "record_type" as const,
+      header: "Type",
       render: (row: BreedingRecord) => {
         const typeInfo = recordTypeLabels[row.record_type] || { label: row.record_type, color: "bg-gray-500", icon: AlertCircle };
         return (
@@ -147,14 +189,14 @@ export default function BreedingPage() {
         );
       }
     },
-    { 
-      key: "expected_calving_date" as const, 
-      header: "Expected Calving", 
-      render: (row: BreedingRecord) => row.expected_calving_date ? format(new Date(row.expected_calving_date), "dd MMM yyyy") : "-" 
+    {
+      key: "expected_calving_date" as const,
+      header: "Expected Calving",
+      render: (row: BreedingRecord) => row.expected_calving_date ? format(new Date(row.expected_calving_date), "dd MMM yyyy") : "-"
     },
-    { 
-      key: "pregnancy_confirmed" as const, 
-      header: "Status", 
+    {
+      key: "pregnancy_confirmed" as const,
+      header: "Status",
       render: (row: BreedingRecord) => {
         if (row.record_type === "pregnancy_check") {
           return row.pregnancy_confirmed ? (
@@ -170,6 +212,31 @@ export default function BreedingPage() {
       }
     },
     { key: "notes" as const, header: "Notes", render: (row: BreedingRecord) => row.notes || "-" },
+    ...(canEdit ? [{
+      key: "actions" as const,
+      header: "Actions",
+      render: (row: BreedingRecord) => (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleEditRecord(row)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setEditingRecord(row);
+              setDeleteDialogOpen(true);
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      ),
+    }] : []),
   ];
 
   return (
@@ -180,15 +247,15 @@ export default function BreedingPage() {
       >
         <div className="flex items-center gap-2">
           <div className="flex items-center rounded-lg border p-1">
-            <Button 
-              variant={viewMode === "calendar" ? "default" : "ghost"} 
+            <Button
+              variant={viewMode === "calendar" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("calendar")}
             >
               <CalendarDays className="mr-2 h-4 w-4" /> Calendar
             </Button>
-            <Button 
-              variant={viewMode === "list" ? "default" : "ghost"} 
+            <Button
+              variant={viewMode === "list" ? "default" : "ghost"}
               size="sm"
               onClick={() => setViewMode("list")}
             >
@@ -197,212 +264,225 @@ export default function BreedingPage() {
           </div>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
-              <Button><Plus className="mr-2 h-4 w-4" /> Add Record</Button>
+              <Button onClick={() => { setEditingRecord(null); resetForm(); setDialogOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" /> Add Record
+              </Button>
             </DialogTrigger>
             <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add Breeding Record</DialogTitle>
-            </DialogHeader>
-            <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
-              <div className="space-y-2">
-                <Label>Cattle *</Label>
-                <Select value={selectedCattle} onValueChange={setSelectedCattle}>
-                  <SelectTrigger><SelectValue placeholder="Select cattle" /></SelectTrigger>
-                  <SelectContent>
-                    {cattle.map(c => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.tag_number} {c.name && `- ${c.name}`}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Record Type *</Label>
-                <Select value={recordType} onValueChange={setRecordType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="heat_detection">Heat Detection</SelectItem>
-                    <SelectItem value="artificial_insemination">Artificial Insemination</SelectItem>
-                    <SelectItem value="pregnancy_check">Pregnancy Check</SelectItem>
-                    <SelectItem value="calving">Calving</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label>Date *</Label>
-                <Input type="date" value={recordDate} onChange={e => setRecordDate(e.target.value)} />
-              </div>
-
-              {recordType === "heat_detection" && (
+              <DialogHeader>
+                <DialogTitle>{editingRecord ? "Edit Breeding Record" : "Add Breeding Record"}</DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 py-4 max-h-[70vh] overflow-y-auto">
                 <div className="space-y-2">
-                  <Label>Heat Cycle Day</Label>
-                  <Input type="number" value={heatCycleDay} onChange={e => setHeatCycleDay(e.target.value)} placeholder="e.g., 21" />
+                  <Label>Cattle *</Label>
+                  <Select value={selectedCattle} onValueChange={setSelectedCattle}>
+                    <SelectTrigger><SelectValue placeholder="Select cattle" /></SelectTrigger>
+                    <SelectContent>
+                      {cattle.map(c => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.tag_number} {c.name && `- ${c.name}`}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
                 </div>
-              )}
 
-              {recordType === "artificial_insemination" && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Bull/Semen ID</Label>
-                    <Input value={inseminationBull} onChange={e => setInseminationBull(e.target.value)} placeholder="Bull name or semen batch" />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Technician</Label>
-                    <Input value={inseminationTech} onChange={e => setInseminationTech(e.target.value)} placeholder="AI technician name" />
-                  </div>
-                  <p className="text-sm text-muted-foreground">Expected calving will be calculated automatically (283 days)</p>
-                </>
-              )}
+                <div className="space-y-2">
+                  <Label>Record Type *</Label>
+                  <Select value={recordType} onValueChange={setRecordType}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="heat_detection">Heat Detection</SelectItem>
+                      <SelectItem value="artificial_insemination">Artificial Insemination</SelectItem>
+                      <SelectItem value="pregnancy_check">Pregnancy Check</SelectItem>
+                      <SelectItem value="calving">Calving</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {recordType === "pregnancy_check" && (
-                <>
+                <div className="space-y-2">
+                  <Label>Date *</Label>
+                  <Input type="date" value={recordDate} onChange={e => setRecordDate(e.target.value)} />
+                </div>
+
+                {recordType === "heat_detection" && (
                   <div className="space-y-2">
-                    <Label>Pregnancy Confirmed?</Label>
-                    <Select value={pregnancyConfirmed} onValueChange={setPregnancyConfirmed}>
-                      <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="yes">Yes - Pregnant</SelectItem>
-                        <SelectItem value="no">No - Not Pregnant</SelectItem>
-                      </SelectContent>
-                    </Select>
+                    <Label>Heat Cycle Day</Label>
+                    <Input type="number" value={heatCycleDay} onChange={e => setHeatCycleDay(e.target.value)} placeholder="e.g., 21" />
                   </div>
-                  {pregnancyConfirmed === "yes" && (
+                )}
+
+                {recordType === "artificial_insemination" && (
+                  <>
                     <div className="space-y-2">
-                      <Label>Expected Calving Date</Label>
-                      <Input type="date" value={expectedCalving} onChange={e => setExpectedCalving(e.target.value)} />
+                      <Label>Bull/Semen ID</Label>
+                      <Input value={inseminationBull} onChange={e => setInseminationBull(e.target.value)} placeholder="Bull name or semen batch" />
                     </div>
-                  )}
-                </>
-              )}
-
-              {recordType === "calving" && (
-                <>
-                  <div className="space-y-2">
-                    <Label>Actual Calving Date</Label>
-                    <Input type="date" value={actualCalving} onChange={e => setActualCalving(e.target.value)} />
-                  </div>
-                  <div className="grid grid-cols-2 gap-4">
                     <div className="space-y-2">
-                      <Label>Calf Gender</Label>
-                      <Select value={calfGender} onValueChange={setCalfGender}>
+                      <Label>Technician</Label>
+                      <Input value={inseminationTech} onChange={e => setInseminationTech(e.target.value)} placeholder="AI technician name" />
+                    </div>
+                    <p className="text-sm text-muted-foreground">Expected calving will be calculated automatically (283 days)</p>
+                  </>
+                )}
+
+                {recordType === "pregnancy_check" && (
+                  <>
+                    <div className="space-y-2">
+                      <Label>Pregnancy Confirmed?</Label>
+                      <Select value={pregnancyConfirmed} onValueChange={setPregnancyConfirmed}>
                         <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="male">Male</SelectItem>
-                          <SelectItem value="female">Female</SelectItem>
+                          <SelectItem value="yes">Yes - Pregnant</SelectItem>
+                          <SelectItem value="no">No - Not Pregnant</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
+                    {pregnancyConfirmed === "yes" && (
+                      <div className="space-y-2">
+                        <Label>Expected Calving Date</Label>
+                        <Input type="date" value={expectedCalving} onChange={e => setExpectedCalving(e.target.value)} />
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {recordType === "calving" && (
+                  <>
                     <div className="space-y-2">
-                      <Label>Calf Weight (kg)</Label>
-                      <Input type="number" value={calfWeight} onChange={e => setCalfWeight(e.target.value)} />
+                      <Label>Actual Calving Date</Label>
+                      <Input type="date" value={actualCalving} onChange={e => setActualCalving(e.target.value)} />
                     </div>
-                  </div>
-                </>
-              )}
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label>Calf Gender</Label>
+                        <Select value={calfGender} onValueChange={setCalfGender}>
+                          <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="male">Male</SelectItem>
+                            <SelectItem value="female">Female</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label>Calf Weight (kg)</Label>
+                        <Input type="number" value={calfWeight} onChange={e => setCalfWeight(e.target.value)} />
+                      </div>
+                    </div>
+                  </>
+                )}
 
-              <div className="space-y-2">
-                <Label>Notes</Label>
-                <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes..." />
+                <div className="space-y-2">
+                  <Label>Notes</Label>
+                  <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Additional notes..." />
+                </div>
+
+                <Button className="w-full" onClick={handleSaveRecord} disabled={createRecord.isPending || updateRecord.isPending}>
+                  {(createRecord.isPending || updateRecord.isPending) && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingRecord ? "Update Record" : "Save Record"}
+                </Button>
               </div>
-
-              <Button className="w-full" onClick={handleCreateRecord} disabled={createRecord.isPending}>
-                {createRecord.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-                Save Record
-              </Button>
-            </div>
-          </DialogContent>
+            </DialogContent>
           </Dialog>
         </div>
       </PageHeader>
 
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Breeding Record"
+        description="Are you sure you want to delete this breeding record? This action cannot be undone."
+        onConfirm={handleDeleteRecord}
+        confirmText="Delete"
+        variant="destructive"
+      />
+
       {viewMode === "calendar" ? (
-        <BreedingCalendar 
-          breedingRecords={records} 
-          healthRecords={healthRecords} 
-          cattle={cattle} 
+        <BreedingCalendar
+          breedingRecords={records}
+          healthRecords={healthRecords}
+          cattle={cattle}
         />
       ) : (
         <>
           {/* Stats Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Heat Detections</CardTitle>
-            <Heart className="h-4 w-4 text-breeding-heat" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{heatRecords}</div>
-            <p className="text-xs text-muted-foreground">total records</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">AI Records</CardTitle>
-            <Syringe className="h-4 w-4 text-breeding-insemination" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{aiRecords}</div>
-            <p className="text-xs text-muted-foreground">inseminations</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Confirmed Pregnant</CardTitle>
-            <AlertCircle className="h-4 w-4 text-breeding-pregnancy" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{pregnantCount}</div>
-            <p className="text-xs text-muted-foreground">awaiting calving</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium">Calvings This Month</CardTitle>
-            <Baby className="h-4 w-4 text-breeding-calving" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{calvingsThisMonth}</div>
-            <p className="text-xs text-muted-foreground">new calves</p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Heat Detections</CardTitle>
+                <Heart className="h-4 w-4 text-breeding-heat" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{heatRecords}</div>
+                <p className="text-xs text-muted-foreground">total records</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">AI Records</CardTitle>
+                <Syringe className="h-4 w-4 text-breeding-insemination" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{aiRecords}</div>
+                <p className="text-xs text-muted-foreground">inseminations</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Confirmed Pregnant</CardTitle>
+                <AlertCircle className="h-4 w-4 text-breeding-pregnancy" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{pregnantCount}</div>
+                <p className="text-xs text-muted-foreground">awaiting calving</p>
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium">Calvings This Month</CardTitle>
+                <Baby className="h-4 w-4 text-breeding-calving" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{calvingsThisMonth}</div>
+                <p className="text-xs text-muted-foreground">new calves</p>
+              </CardContent>
+            </Card>
+          </div>
 
           {/* Upcoming Calvings */}
           {upcomingCalvings.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg flex items-center gap-2">
-              <Calendar className="h-5 w-5" /> Upcoming Calvings
-            </CardTitle>
-            <CardDescription>Expected calving dates in the coming weeks</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {upcomingCalvings.map(record => {
-                const daysLeft = differenceInDays(new Date(record.expected_calving_date!), new Date());
-                return (
-                  <div key={record.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
-                    <div className="h-10 w-10 rounded-lg bg-warning/20 flex items-center justify-center">
-                      <Baby className="h-5 w-5 text-warning" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium truncate">{getCattleTag(record.cattle_id)}</p>
-                      <p className="text-sm text-muted-foreground">
-                        {format(new Date(record.expected_calving_date!), "dd MMM yyyy")}
-                      </p>
-                    </div>
-                    <Badge variant={daysLeft <= 7 ? "destructive" : daysLeft <= 14 ? "default" : "secondary"}>
-                      {daysLeft} days
-                    </Badge>
-                  </div>
-                );
-              })}
-            </div>
-          </CardContent>
-        </Card>
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Calendar className="h-5 w-5" /> Upcoming Calvings
+                </CardTitle>
+                <CardDescription>Expected calving dates in the coming weeks</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {upcomingCalvings.map(record => {
+                    const daysLeft = differenceInDays(new Date(record.expected_calving_date!), new Date());
+                    return (
+                      <div key={record.id} className="flex items-center gap-3 p-3 rounded-lg border bg-card">
+                        <div className="h-10 w-10 rounded-lg bg-warning/20 flex items-center justify-center">
+                          <Baby className="h-5 w-5 text-warning" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{getCattleTag(record.cattle_id)}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {format(new Date(record.expected_calving_date!), "dd MMM yyyy")}
+                          </p>
+                        </div>
+                        <Badge variant={daysLeft <= 7 ? "destructive" : daysLeft <= 14 ? "default" : "secondary"}>
+                          {daysLeft} days
+                        </Badge>
+                      </div>
+                    );
+                  })}
+                </div>
+              </CardContent>
+            </Card>
           )}
 
           {/* Records Table */}
