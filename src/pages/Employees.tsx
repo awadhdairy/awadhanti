@@ -4,14 +4,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAutoAttendance } from "@/hooks/useAutoAttendance";
 import { useExpenseAutomation } from "@/hooks/useExpenseAutomation";
+import { useUserRole } from "@/hooks/useUserRole";
 import { PageHeader } from "@/components/common/PageHeader";
 import { DataTable } from "@/components/common/DataTable";
 import { EmployeeDetailDialog } from "@/components/employees/EmployeeDetailDialog";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
 import {
   ResponsiveDialog,
   ResponsiveDialogContent,
@@ -20,7 +24,7 @@ import {
 } from "@/components/ui/responsive-dialog";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Calendar, DollarSign, Clock, Users, CheckCircle, XCircle, Loader2, Eye } from "lucide-react";
+import { Plus, Calendar, DollarSign, Clock, Users, CheckCircle, XCircle, Loader2, Eye, Edit, Trash2 } from "lucide-react";
 import { format } from "date-fns";
 
 interface Employee {
@@ -81,6 +85,11 @@ const roleLabels: Record<string, string> = {
 export default function EmployeesPage() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const { role } = useUserRole();
+
+  // Check if user can edit (admin or manager only)
+  const canEdit = role === 'super_admin' || role === 'manager';
+
   // Auto-create today's attendance for all active employees (present by default)
   useAutoAttendance();
   const [employees, setEmployees] = useState<Employee[]>([]);
@@ -91,16 +100,29 @@ export default function EmployeesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [attendanceDialogOpen, setAttendanceDialogOpen] = useState(false);
   const [payrollDialogOpen, setPayrollDialogOpen] = useState(false);
+  const [employeeDialogOpen, setEmployeeDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedEmployeeDetail, setSelectedEmployeeDetail] = useState<Employee | null>(null);
   const [employeeDetailOpen, setEmployeeDetailOpen] = useState(false);
-  
+  const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  // Employee Form states
+  const [empName, setEmpName] = useState("");
+  const [empPhone, setEmpPhone] = useState("");
+  const [empRole, setEmpRole] = useState("farm_worker");
+  const [empSalary, setEmpSalary] = useState("");
+  const [empJoiningDate, setEmpJoiningDate] = useState("");
+  const [empAddress, setEmpAddress] = useState("");
+  const [empIsActive, setEmpIsActive] = useState(true);
+
   // Form states
   const [selectedEmployee, setSelectedEmployee] = useState("");
   const [attendanceDate, setAttendanceDate] = useState(format(new Date(), "yyyy-MM-dd"));
   const [checkIn, setCheckIn] = useState("");
   const [checkOut, setCheckOut] = useState("");
   const [attendanceStatus, setAttendanceStatus] = useState("present");
-  
+
   const [payPeriodStart, setPayPeriodStart] = useState("");
   const [payPeriodEnd, setPayPeriodEnd] = useState("");
   const [baseSalary, setBaseSalary] = useState("");
@@ -132,6 +154,80 @@ export default function EmployeesPage() {
     }
   };
 
+  const resetEmployeeForm = () => {
+    setEmpName("");
+    setEmpPhone("");
+    setEmpRole("farm_worker");
+    setEmpSalary("");
+    setEmpJoiningDate("");
+    setEmpAddress("");
+    setEmpIsActive(true);
+    setEditingEmployee(null);
+  };
+
+  const handleEditEmployee = (employee: Employee) => {
+    setEditingEmployee(employee);
+    setEmpName(employee.name);
+    setEmpPhone(employee.phone || "");
+    setEmpRole(employee.role);
+    setEmpSalary(employee.salary?.toString() || "");
+    setEmpJoiningDate(employee.joining_date || "");
+    setEmpAddress(employee.address || "");
+    setEmpIsActive(employee.is_active);
+    setEmployeeDialogOpen(true);
+  };
+
+  const handleSaveEmployee = async () => {
+    if (!empName.trim()) {
+      toast({ title: "Error", description: "Employee name is required", variant: "destructive" });
+      return;
+    }
+
+    setSaving(true);
+    const employeeData = {
+      name: empName.trim(),
+      phone: empPhone || null,
+      role: empRole,
+      salary: empSalary ? parseFloat(empSalary) : null,
+      joining_date: empJoiningDate || null,
+      address: empAddress || null,
+      is_active: empIsActive,
+    };
+
+    let error;
+    if (editingEmployee) {
+      const result = await supabase.from("employees").update(employeeData).eq("id", editingEmployee.id);
+      error = result.error;
+    } else {
+      const result = await supabase.from("employees").insert(employeeData);
+      error = result.error;
+    }
+
+    setSaving(false);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: editingEmployee ? "Employee updated" : "Employee added" });
+      setEmployeeDialogOpen(false);
+      resetEmployeeForm();
+      fetchData();
+    }
+  };
+
+  const handleDeleteEmployee = async () => {
+    if (!editingEmployee) return;
+
+    const { error } = await supabase.from("employees").delete().eq("id", editingEmployee.id);
+    if (error) {
+      toast({ title: "Error", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Success", description: "Employee deleted" });
+      setDeleteDialogOpen(false);
+      setEditingEmployee(null);
+      fetchData();
+    }
+  };
+
   const handleMarkAttendance = async () => {
     if (!selectedEmployee || !attendanceDate) {
       toast({ title: "Error", description: "Please select employee and date", variant: "destructive" });
@@ -148,9 +244,9 @@ export default function EmployeesPage() {
         check_out: checkOut || null,
         status: attendanceStatus,
       },
-      { 
+      {
         onConflict: 'employee_id,attendance_date',
-        ignoreDuplicates: false 
+        ignoreDuplicates: false
       }
     );
 
@@ -162,7 +258,7 @@ export default function EmployeesPage() {
           .delete()
           .eq("employee_id", selectedEmployee)
           .eq("attendance_date", attendanceDate);
-        
+
         if (!deleteError) {
           const { error: insertError } = await supabase.from("attendance").insert({
             employee_id: selectedEmployee,
@@ -171,7 +267,7 @@ export default function EmployeesPage() {
             check_out: checkOut || null,
             status: attendanceStatus,
           });
-          
+
           if (insertError) {
             toast({ title: "Error", description: insertError.message, variant: "destructive" });
             return;
@@ -182,7 +278,7 @@ export default function EmployeesPage() {
         return;
       }
     }
-    
+
     toast({ title: "Success", description: "Attendance updated successfully" });
     setAttendanceDialogOpen(false);
     resetAttendanceForm();
@@ -252,9 +348,9 @@ export default function EmployeesPage() {
 
       // Invalidate expenses query to refresh expense data
       queryClient.invalidateQueries({ queryKey: ["expenses"] });
-      
-      const message = expenseCreated 
-        ? "Payment marked as paid & expense recorded" 
+
+      const message = expenseCreated
+        ? "Payment marked as paid & expense recorded"
         : "Payment marked as paid (expense already exists)";
       toast({ title: "Success", description: message });
       fetchData();
@@ -284,9 +380,9 @@ export default function EmployeesPage() {
     { key: "employee_id" as const, header: "Employee", render: (row: Attendance) => getEmployeeName(row.employee_id) },
     { key: "check_in" as const, header: "Check In", render: (row: Attendance) => row.check_in || "-" },
     { key: "check_out" as const, header: "Check Out", render: (row: Attendance) => row.check_out || "-" },
-    { 
-      key: "status" as const, 
-      header: "Status", 
+    {
+      key: "status" as const,
+      header: "Status",
       render: (row: Attendance) => (
         <Badge variant={row.status === "present" ? "default" : row.status === "absent" ? "destructive" : "secondary"}>
           {row.status}
@@ -302,9 +398,9 @@ export default function EmployeesPage() {
     { key: "bonus" as const, header: "Bonus", render: (row: PayrollRecord) => `₹${row.bonus.toLocaleString()}` },
     { key: "deductions" as const, header: "Deductions", render: (row: PayrollRecord) => `₹${row.deductions.toLocaleString()}` },
     { key: "net_salary" as const, header: "Net Pay", render: (row: PayrollRecord) => <span className="font-semibold">₹{row.net_salary.toLocaleString()}</span> },
-    { 
-      key: "payment_status" as const, 
-      header: "Status", 
+    {
+      key: "payment_status" as const,
+      header: "Status",
       render: (row: PayrollRecord) => (
         <div className="flex items-center gap-2">
           <Badge variant={row.payment_status === "paid" ? "default" : "secondary"}>
@@ -324,9 +420,9 @@ export default function EmployeesPage() {
     { key: "name" as const, header: "Shift Name" },
     { key: "start_time" as const, header: "Start Time" },
     { key: "end_time" as const, header: "End Time" },
-    { 
-      key: "is_active" as const, 
-      header: "Status", 
+    {
+      key: "is_active" as const,
+      header: "Status",
       render: (row: Shift) => (
         <Badge variant={row.is_active ? "default" : "secondary"}>
           {row.is_active ? "Active" : "Inactive"}
@@ -341,11 +437,11 @@ export default function EmployeesPage() {
   };
 
   const employeeColumns = [
-    { 
-      key: "name" as const, 
-      header: "Name", 
+    {
+      key: "name" as const,
+      header: "Name",
       render: (row: Employee) => (
-        <button 
+        <button
           onClick={() => handleViewEmployee(row)}
           className="text-primary hover:underline font-medium flex items-center gap-1"
         >
@@ -357,15 +453,40 @@ export default function EmployeesPage() {
     { key: "phone" as const, header: "Phone", render: (row: Employee) => row.phone || "-" },
     { key: "role" as const, header: "Role", render: (row: Employee) => roleLabels[row.role] || row.role },
     { key: "salary" as const, header: "Salary", render: (row: Employee) => row.salary ? `₹${row.salary.toLocaleString()}` : "-" },
-    { 
-      key: "is_active" as const, 
-      header: "Status", 
+    {
+      key: "is_active" as const,
+      header: "Status",
       render: (row: Employee) => (
         <Badge variant={row.is_active ? "default" : "secondary"}>
           {row.is_active ? "Active" : "Inactive"}
         </Badge>
       )
     },
+    ...(canEdit ? [{
+      key: "actions" as const,
+      header: "Actions",
+      render: (row: Employee) => (
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => handleEditEmployee(row)}
+          >
+            <Edit className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={() => {
+              setEditingEmployee(row);
+              setDeleteDialogOpen(true);
+            }}
+          >
+            <Trash2 className="h-4 w-4 text-destructive" />
+          </Button>
+        </div>
+      ),
+    }] : []),
   ];
 
   // Stats
@@ -442,6 +563,70 @@ export default function EmployeesPage() {
         </TabsList>
 
         <TabsContent value="employees" className="space-y-4">
+          {canEdit && (
+            <div className="flex justify-end">
+              <Button onClick={() => { resetEmployeeForm(); setEmployeeDialogOpen(true); }}>
+                <Plus className="mr-2 h-4 w-4" /> Add Employee
+              </Button>
+            </div>
+          )}
+
+          {/* Add/Edit Employee Dialog */}
+          <ResponsiveDialog open={employeeDialogOpen} onOpenChange={setEmployeeDialogOpen}>
+            <ResponsiveDialogContent>
+              <ResponsiveDialogHeader>
+                <ResponsiveDialogTitle>{editingEmployee ? "Edit Employee" : "Add Employee"}</ResponsiveDialogTitle>
+              </ResponsiveDialogHeader>
+              <div className="space-y-4 py-4 overflow-y-auto max-h-[60vh] sm:max-h-none">
+                <div className="space-y-2">
+                  <Label>Name *</Label>
+                  <Input value={empName} onChange={e => setEmpName(e.target.value)} placeholder="Employee name" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Phone</Label>
+                  <Input value={empPhone} onChange={e => setEmpPhone(e.target.value)} placeholder="Phone number" />
+                </div>
+                <div className="space-y-2">
+                  <Label>Role</Label>
+                  <Select value={empRole} onValueChange={setEmpRole}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="super_admin">Super Admin</SelectItem>
+                      <SelectItem value="manager">Manager</SelectItem>
+                      <SelectItem value="accountant">Accountant</SelectItem>
+                      <SelectItem value="delivery_staff">Delivery Staff</SelectItem>
+                      <SelectItem value="farm_worker">Farm Worker</SelectItem>
+                      <SelectItem value="vet_staff">Vet Staff</SelectItem>
+                      <SelectItem value="auditor">Auditor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Salary (₹)</Label>
+                    <Input type="number" value={empSalary} onChange={e => setEmpSalary(e.target.value)} placeholder="Monthly salary" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Joining Date</Label>
+                    <Input type="date" value={empJoiningDate} onChange={e => setEmpJoiningDate(e.target.value)} />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <Label>Address</Label>
+                  <Textarea value={empAddress} onChange={e => setEmpAddress(e.target.value)} placeholder="Address" rows={2} />
+                </div>
+                <div className="flex items-center justify-between">
+                  <Label>Active Status</Label>
+                  <Switch checked={empIsActive} onCheckedChange={setEmpIsActive} />
+                </div>
+                <Button className="w-full" onClick={handleSaveEmployee} disabled={saving}>
+                  {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                  {editingEmployee ? "Update Employee" : "Add Employee"}
+                </Button>
+              </div>
+            </ResponsiveDialogContent>
+          </ResponsiveDialog>
+
           <Card>
             <CardHeader>
               <CardTitle>All Employees</CardTitle>
@@ -607,6 +792,17 @@ export default function EmployeesPage() {
         employee={selectedEmployeeDetail}
         open={employeeDetailOpen}
         onOpenChange={setEmployeeDetailOpen}
+      />
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Employee"
+        description={`Are you sure you want to delete ${editingEmployee?.name}? This action cannot be undone.`}
+        onConfirm={handleDeleteEmployee}
+        confirmText="Delete"
+        variant="destructive"
       />
     </div>
   );
