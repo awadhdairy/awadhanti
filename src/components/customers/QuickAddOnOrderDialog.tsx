@@ -140,11 +140,8 @@ export function QuickAddOnOrderDialog({
     setSaving(true);
     try {
       // Create delivery record with delivery_time since it's marked as delivered
-      const currentTime = new Date().toLocaleTimeString("en-IN", {
-        hour: "2-digit",
-        minute: "2-digit",
-        hour12: true,
-      });
+      // Use ISO timestamp format for the TIMESTAMP WITH TIME ZONE column
+      const currentTime = new Date().toISOString();
       
       const { data: delivery, error: deliveryError } = await supabase
         .from("deliveries")
@@ -157,6 +154,7 @@ export function QuickAddOnOrderDialog({
         })
         .select("id")
         .single();
+
 
       if (deliveryError) throw deliveryError;
 
